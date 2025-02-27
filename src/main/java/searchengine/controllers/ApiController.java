@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.*;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.model.Page;
 import searchengine.model.Site;
+import searchengine.services.IndexingService;
 import searchengine.services.StatisticsService;
 
 @RestController
@@ -13,8 +14,11 @@ public class ApiController {
 
     private final StatisticsService statisticsService;
 
-    public ApiController(StatisticsService statisticsService) {
+    private final IndexingService indexingService;
+
+    public ApiController(StatisticsService statisticsService, IndexingService indexingService) {
         this.statisticsService = statisticsService;
+        this.indexingService = indexingService;
     }
 
     @GetMapping("/statistics")
@@ -24,8 +28,9 @@ public class ApiController {
 
 
     @GetMapping("/startIndexing")
-    public Boolean startIndexing(){
-        return true;
+    public ResponseEntity<?> startIndexing(){
+        indexingService.startIndexingSite();
+        return ResponseEntity.ok("Indexing start");
     }
 
     @GetMapping("/stopIndexing")

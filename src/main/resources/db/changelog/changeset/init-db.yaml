@@ -3,6 +3,8 @@ databaseChangeLog:
       id: 1
       author: Mynthon
       changes:
+        - sql:
+            sql: CREATE TYPE indexing_status AS ENUM ('INDEXING', 'INDEXED', 'FAILED');
         - createTable:
             tableName: site
             columns:
@@ -35,8 +37,6 @@ databaseChangeLog:
                   type: varchar(255)
                   constraints:
                     nullable: false
-              - sql:
-                 sql: CREATE TYPE indexing_status AS ENUM ('INDEXING', 'INDEXED', 'FAILED');
 
   - changeSet:
       id: 2
