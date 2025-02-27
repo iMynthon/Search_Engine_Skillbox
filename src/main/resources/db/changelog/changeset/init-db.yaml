@@ -1,0 +1,151 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1
+      author: Mynthon
+      changes:
+        - createTable:
+            tableName: site
+            columns:
+              - column:
+                  name: id
+                  type: serial
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: status
+                  type: indexing_status
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status_time
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_error
+                  type: text
+              - column:
+                  name: url
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - sql:
+                 sql: CREATE TYPE indexing_status AS ENUM ('INDEXING', 'INDEXED', 'FAILED');
+
+  - changeSet:
+      id: 2
+      author: Mynthon
+      changes:
+        - createTable:
+            tableName: page
+            columns:
+              - column:
+                  name: id
+                  type: serial
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: site_id
+                  type: int
+                  constraints:
+                    foreignKeyName: fk_site
+                    references: site(id)
+                    nullable: false
+              - column:
+                  name: path
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: code
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: content
+                  type: text
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 3
+      author: Mynthon
+      changes:
+        - createIndex:
+            indexName: idx_page_path
+            tableName: page
+            columns:
+              - column:
+                  name: path
+
+  - changeSet:
+      id: 4
+      author: Mynthon
+      changes:
+        - createTable:
+            tableName: lemma
+            columns:
+              - column:
+                  name: id
+                  type: serial
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: site_id
+                  type: int
+                  constraints:
+                    foreignKeyName: fk_site
+                    references: site(id)
+                    nullable: false
+              - column:
+                  name: lemma
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: frequency
+                  type: int
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 5
+      author: Mynthon
+      changes:
+        - createTable:
+            tableName: indices
+            columns:
+              - column:
+                  name: id
+                  type: serial
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: page_id
+                  type: int
+                  constraints:
+                    foreignKeyName: fk_page
+                    references: page(id)
+                    nullable: false
+              - column:
+                  name: lemma_id
+                  type: int
+                  constraints:
+                    foreignKeyName: fk_lemma
+                    references: lemma(id)
+                    nullable: false
+              - column:
+                  name: rank
+                  type: float
+                  constraints:
+                    nullable: false
+
