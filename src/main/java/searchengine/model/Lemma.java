@@ -13,7 +13,7 @@ import lombok.Setter;
 public class Lemma {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @OneToOne

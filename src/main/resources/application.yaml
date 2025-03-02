@@ -9,9 +9,6 @@ spring:
     password: engine
 
   jpa:
-    properties:
-      hibernate:
-      dialect: org.hibernate.dialect.PostgreSQLDialect
     show-sql: true
     hibernate:
       ddl-auto: none
@@ -27,10 +24,8 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://www.lenta.ru
-      name: Лента.ру
-    - url: https://www.skillbox.ru
-      name: Skillbox
+    - url: https://www.svetlovka.ru
+      name: Svetlovka.ru
     - url: https://www.playback.ru
       name: PlayBack.Ru
 

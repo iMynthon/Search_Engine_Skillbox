@@ -4,16 +4,18 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.ToString;
 
 @Entity
 @Table(name = "page")
 @Getter
 @Setter
 @NoArgsConstructor
+@ToString
 public class Page {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -29,4 +31,7 @@ public class Page {
     @Column(name = "content")
     private String content;
 
+    public Page(String path) {
+        this.path = path;
+    }
 }
