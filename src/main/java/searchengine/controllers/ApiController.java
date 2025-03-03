@@ -1,5 +1,6 @@
 package searchengine.controllers;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import searchengine.dto.statistics.StatisticsResponse;
@@ -7,6 +8,9 @@ import searchengine.model.Page;
 import searchengine.model.Site;
 import searchengine.services.IndexingService;
 import searchengine.services.StatisticsService;
+
+import java.util.Map;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api")
@@ -26,16 +30,17 @@ public class ApiController {
         return ResponseEntity.ok(statisticsService.getStatistics());
     }
 
-
+    @ResponseStatus(HttpStatus.OK)
     @GetMapping("/startIndexing")
     public ResponseEntity<?> startIndexing(){
-        indexingService.startIndexingSite();
-        return ResponseEntity.ok("Indexing start");
+       indexingService.startIndexingSite();
+       return ResponseEntity.ok(Map.of("result",true));
     }
 
+
     @GetMapping("/stopIndexing")
-    public Boolean stopIndexing(){
-        return true;
+    public Map<String,? super Objects> stopIndexing(){
+       return indexingService.stopIndexing();
     }
 
     @PostMapping("/indexPage")

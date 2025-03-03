@@ -15,7 +15,6 @@ import java.util.concurrent.RecursiveTask;
 import java.util.regex.Pattern;
 
 @Slf4j
-@ToString
 public class SiteCrawler extends RecursiveTask<List<Page>> {
 
     private static String HEAD_URL;
@@ -24,6 +23,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
     private final List<String> visitedUrls;
 
+
     private static final Pattern FILE_PATTERN = Pattern
             .compile(".*\\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz|7z|mp3|wav|mp4|mkv|avi|mov|sql)$", Pattern.CASE_INSENSITIVE);
 
@@ -31,6 +31,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
     public SiteCrawler(String url) {
         this(url, new CopyOnWriteArrayList<>());
         HEAD_URL = url;
+
     }
 
     public SiteCrawler(String url, List<String> visitedUrls) {
@@ -42,15 +43,15 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
     protected List<Page> compute() {
 
         Page currentPage = new Page(another_url.substring(HEAD_URL.length()));
+
         List<Page> pages = new CopyOnWriteArrayList<>();
 
         synchronized (visitedUrls) {
             if (visitedUrls.contains(another_url)) {
                 return pages;
             }
+            visitedUrls.add(another_url);
         }
-        visitedUrls.add(another_url);
-
 
         log.info("Indexing url: {}", another_url);
 
@@ -59,10 +60,9 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         try {
 
             Connection.Response response = Jsoup.connect(another_url)
-                    .userAgent("Mozilla/5.0 (Windows; U; WindowsNT 5.1; en-US; rv1.8.1.6) Gecko/20070725 Firefox/2.0.0.6")
-                    .referrer("http://www.google.com")
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) YandexBrowser/21.9.0.1234.0 Chrome/93.0.4577.82 Safari/537.36")
+                    .referrer("http://www.example.com")
                     .timeout(5000)
-                    .followRedirects(true)
                     .execute();
 
             currentPage.setCode(response.statusCode());
@@ -75,14 +75,12 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
             for (Element element : elements) {
                 String abshref = element.attr("abs:href");
-                synchronized (elements) {
                     if (isValidLink(abshref.trim())) {
                         SiteCrawler siteCrawler = new SiteCrawler(abshref, visitedUrls);
                         siteCrawler.fork();
 
                         crawler.add(siteCrawler);
                     }
-                }
             }
 
             for (SiteCrawler siteCrawler : crawler) {
@@ -91,7 +89,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             }
 
         } catch (Exception e) {
-            log.info("Invalid url");
+            log.info("Invalid url: {}",another_url);
         }
         return pages;
     }

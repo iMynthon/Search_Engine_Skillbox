@@ -9,6 +9,7 @@ import org.hibernate.annotations.JdbcType;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
@@ -27,7 +28,7 @@ public class Site {
 
     @CreationTimestamp
     @Column(name = "status_time")
-    private LocalDate statusTime;
+    private LocalDateTime statusTime;
 
     @Column(name = "last_error")
     private String lastError;
