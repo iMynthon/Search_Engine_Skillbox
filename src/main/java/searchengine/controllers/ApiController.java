@@ -8,6 +8,7 @@ import searchengine.model.Page;
 import searchengine.model.Site;
 import searchengine.services.IndexingService;
 import searchengine.services.StatisticsService;
+import searchengine.until.ResponseFormat;
 
 import java.util.Map;
 import java.util.Objects;
@@ -30,16 +31,15 @@ public class ApiController {
         return ResponseEntity.ok(statisticsService.getStatistics());
     }
 
-    @ResponseStatus(HttpStatus.OK)
+
     @GetMapping("/startIndexing")
-    public ResponseEntity<?> startIndexing(){
-       indexingService.startIndexingSite();
-       return ResponseEntity.ok(Map.of("result",true));
+    public ResponseEntity<ResponseFormat> startIndexing(){
+       return indexingService.startIndexingSite();
     }
 
 
     @GetMapping("/stopIndexing")
-    public Map<String,? super Objects> stopIndexing(){
+    public ResponseEntity<ResponseFormat> stopIndexing(){
        return indexingService.stopIndexing();
     }
 

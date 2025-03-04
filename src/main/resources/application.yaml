@@ -4,11 +4,16 @@ server:
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5436/searchengine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
-
     username: Warg
     password: engine
 
   jpa:
+    properties:
+      hibernate:
+        jdbc:
+        batch_size: 50
+        order_inserts: true
+        generate_statistics: true
     show-sql: true
     hibernate:
       ddl-auto: none
@@ -26,10 +31,8 @@ indexing-settings:
   sites:
     - url: https://www.svetlovka.ru
       name: Svetlovka.ru
-    - url: https://www.playback.ru
-      name: PlayBack.Ru
-    - url: http://www.sendel.ru
-      name: Sendel.ru
+#    - url: https://www.playback.ru
+#      name: PlayBack.Ru
 
 #connection-setting:
 #  userAgent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) YandexBrowser/21.9.0.1234.0 Chrome/93.0.4577.82 Safari/537.36
