@@ -16,4 +16,10 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(new AppError(HttpStatus.BAD_REQUEST.value(), ie.getMessage()), HttpStatus.BAD_REQUEST);
     }
 
+    @ExceptionHandler
+    public ResponseEntity<AppError> catchResourceNotFoundException(ResourcesNotFoundException e) {
+        log.error(e.getMessage(), e);
+        return new ResponseEntity<>(new AppError(HttpStatus.NOT_FOUND.value(), e.getMessage()), HttpStatus.NOT_FOUND);
+    }
+
 }

@@ -11,7 +11,7 @@ public class PageDTO {
 
     private Integer id;
 
-    private Site site;
+    private String site;
 
     private String path;
 

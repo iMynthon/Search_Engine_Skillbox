@@ -1,14 +1,17 @@
 package searchengine.until;
 
+import lombok.Getter;
+import lombok.ToString;
+
+import java.util.List;
+
+@Getter
+@ToString
 public class ResponseFormat {
 
-    private final String nameResponse;
+    private final Boolean result;
 
-    public ResponseFormat(String nameResponse, Boolean value) {
-        this.nameResponse = nameResponse;
-    }
-
-    public ResponseFormat(String nameResponse, String valueOfMessage) {
-        this.nameResponse = nameResponse;
+    public ResponseFormat(Boolean result) {
+        this.result = result;
     }
 }

@@ -6,6 +6,8 @@ import searchengine.model.Page;
 import searchengine.model.Status;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Getter @Setter
@@ -15,7 +17,7 @@ public class SiteDTO {
 
     private Status status;
 
-    private LocalDate statusTime;
+    private LocalDateTime statusTime;
 
     private String lastError;
 
@@ -23,9 +25,6 @@ public class SiteDTO {
 
     private String name;
 
-    private List<Page> page;
+    private List<PageDTO> page = new ArrayList<>();
 
-    public SiteDTO(LocalDate statusTime) {
-        this.statusTime = LocalDate.now();
-    }
 }

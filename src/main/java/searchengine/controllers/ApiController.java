@@ -1,8 +1,10 @@
 package searchengine.controllers;
 
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import searchengine.dto.site.SiteDTO;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.model.Page;
 import searchengine.model.Site;
@@ -43,9 +45,14 @@ public class ApiController {
        return indexingService.stopIndexing();
     }
 
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<ResponseFormat> delete(@PathVariable Integer id){
+        return indexingService.deleteSiteIndexing(id);
+    }
+
     @PostMapping("/indexPage")
-    public Page addPage(@RequestParam Page page){
-        return page;
+    public ResponseEntity<ResponseFormat> IndexPage(@RequestBody @NotBlank String url){
+        return indexingService.indexPage(url);
     }
 
     @GetMapping
