@@ -6,9 +6,11 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import searchengine.config.ConnectionSetting;
 import searchengine.model.Page;
 
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -24,20 +26,24 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
     private final Set<String> visitedUrls;
 
+    private final ConnectionSetting setting;
+
+    private final Random random = new Random();
 
     private static final Pattern FILE_PATTERN = Pattern
             .compile(".*\\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz|7z|mp3|wav|mp4|mkv|avi|mov|sql)$", Pattern.CASE_INSENSITIVE);
 
 
-    public SiteCrawler(String url) {
-        this(url, ConcurrentHashMap.newKeySet());
+    public SiteCrawler(String url, ConnectionSetting setting) {
+        this(url, ConcurrentHashMap.newKeySet(), setting);
         HEAD_URL = url;
 
     }
 
-    public SiteCrawler(String url, Set<String> visitedUrls) {
+    public SiteCrawler(String url, Set<String> visitedUrls, ConnectionSetting connectionSetting) {
         this.another_url = url;
         this.visitedUrls = visitedUrls;
+        this.setting = connectionSetting;
     }
 
     @Override
@@ -59,8 +65,8 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         try {
 
             Connection.Response response = Jsoup.connect(another_url)
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) YandexBrowser/21.9.0.1234.0 Chrome/93.0.4577.82 Safari/537.36")
-                    .referrer("http://www.example.com")
+                    .userAgent(getRandomSetting().getUserAgent())
+                    .referrer(getRandomSetting().getReferrer())
                     .timeout(5000)
                     .execute();
 
@@ -75,7 +81,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             for (Element element : elements) {
                 String abshref = element.attr("abs:href");
                 if (isValidLink(abshref.trim())) {
-                    SiteCrawler siteCrawler = new SiteCrawler(abshref, visitedUrls);
+                    SiteCrawler siteCrawler = new SiteCrawler(abshref, visitedUrls, setting);
                     siteCrawler.fork();
 
                     crawler.add(siteCrawler);
@@ -89,6 +95,9 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
         } catch (Exception e) {
             log.info("Invalid url: {}", another_url);
+            currentPage.setCode(500);
+            currentPage.setContent(e.getMessage());
+            pages.add(currentPage);
         }
         return pages;
     }
@@ -97,5 +106,10 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         return urls.startsWith(HEAD_URL) && !urls.contains("#") && !visitedUrls.contains(urls)
                 && !FILE_PATTERN.matcher(urls).matches();
 
+    }
+
+    public ConnectionSetting.Setting getRandomSetting(){
+        List<ConnectionSetting.Setting> settings = setting.getSettings();
+        return settings.get(random.nextInt(settings.size()));
     }
 }

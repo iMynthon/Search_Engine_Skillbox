@@ -4,11 +4,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import searchengine.config.ConnectionSetting;
 import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
 import searchengine.dto.site.PageDTO;
 import searchengine.dto.site.SiteDTO;
-import searchengine.exception.IndexingException;
 import searchengine.model.Page;
 import searchengine.model.Site;
 import searchengine.repository.PageRepository;
@@ -31,40 +31,43 @@ public class IndexingService {
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
     private final SitesList sitesList;
-    private final ForkJoinPool pool = new ForkJoinPool();
+    private final ConnectionSetting connectionSetting;
+    private ForkJoinPool pool;
 
-    public IndexingService(SiteRepository siteRepository, PageRepository pageRepository, SitesList sitesList) {
+    public IndexingService(SiteRepository siteRepository, PageRepository pageRepository, SitesList sitesList, ConnectionSetting connectionSetting) {
         this.siteRepository = siteRepository;
         this.pageRepository = pageRepository;
         this.sitesList = sitesList;
+        this.connectionSetting = connectionSetting;
     }
 
     public ResponseEntity<ResponseFormat> startIndexingSite() {
+
+        if (pool != null && !pool.isShutdown()) {
+            return new ResponseEntity<>(
+                    new ResponseString(false, "Indexing is already running")
+                    , HttpStatus.BAD_REQUEST);
+        }
+
+        pool = new ForkJoinPool();
+
         for (SiteConfig siteConfig : sitesList.getSites()) {
-
-            if (pool.isShutdown()) {
-                return new ResponseEntity<>(
-                        new ResponseString(false, "Indexing is already running")
-                        , HttpStatus.BAD_REQUEST);
-            }
-
-            log.info("Indexing site: {}", siteConfig);
+            log.info("Indexing site: {}", siteConfig.getUrl());
 
             Site site = initSite(siteConfig);
+            log.info(site.getUrl());
             siteRepository.save(site);
 
             try {
-                List<Page> pages = pool.invoke(new SiteCrawler(siteConfig.getUrl()));
-
+                List<Page> pages = pool.invoke(new SiteCrawler(siteConfig.getUrl(), connectionSetting));
                 site.setPage(addSiteToPage(site, pages));
-
-                site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
-
+                site.setStatus(INDEXED);
                 pageRepository.saveAll(pages);
+
             } catch (Exception e) {
                 log.error("Error during site indexing: {}", e.getMessage());
                 site.setStatus(FAILED);
-                site.setLastError(pool.isShutdown() ? "Indexing stop to User" : e.getMessage());
+                site.setLastError(e.getMessage());
                 siteRepository.save(site);
                 return new ResponseEntity<>(
                         new ResponseString(false, "Error during site indexing: " + e.getMessage()),
@@ -78,16 +81,16 @@ public class IndexingService {
 
     public ResponseEntity<ResponseFormat> stopIndexing() {
         try {
-            if (!pool.isShutdown()) {
-                log.info("Индексация остановлена");
+            if (pool != null && !pool.isShutdown()) {
                 pool.shutdownNow();
                 if (pool.awaitTermination(5, TimeUnit.SECONDS)) {
                     pool.shutdownNow();
                     return new ResponseEntity<>(new ResponseFormat(true), HttpStatus.OK);
                 }
             }
-        } catch (IndexingException | InterruptedException e) {
+        } catch (InterruptedException e) {
             log.info(("Error stop indexing"), e);
+            Thread.currentThread().interrupt();
         }
         return new ResponseEntity<>(new ResponseString(false, "Indexing don't start")
                 , HttpStatus.BAD_REQUEST);
@@ -103,26 +106,34 @@ public class IndexingService {
     }
 
     public ResponseEntity<ResponseFormat> indexPage(String url) {
+        Optional<SiteConfig> siteConfig = findSiteConfig(url);
 
-        for (SiteConfig siteConfig : sitesList.getSites()) {
-            if (url.startsWith(siteConfig.getUrl())) {
-
-                log.info("Indexing page: {}", url);
-
-                Site site = siteRepository.findByUrl(siteConfig.getUrl());
-
-                List<Page> pages = pool.invoke(new SiteCrawler(url));
-
-                addSiteToPage(site, pages);
-
-                pageRepository.saveAll(pages);
-
-                return new ResponseEntity<>(new ResponseFormat(true), HttpStatus.CREATED);
-            }
+        if (siteConfig.isEmpty()) {
+            return new ResponseEntity<>(
+                    new ResponseString(false, "Данная страница находится за пределами сайтов, указанных в конфигурационном файле"),
+                    HttpStatus.NOT_FOUND);
         }
-        return new ResponseEntity<>(
-                new ResponseString(false,
-                        "Данная страница находится за пределами конфигурационный файлов"), HttpStatus.NOT_FOUND);
+
+        Site site = siteRepository.findByUrl(siteConfig.get().getUrl());
+
+        try {
+
+            List<Page> pages = pool.invoke(new SiteCrawler(url, connectionSetting));
+
+            addSiteToPage(site, pages);
+            pageRepository.saveAll(pages);
+
+            return new ResponseEntity<>(new ResponseFormat(true), HttpStatus.CREATED);
+        } catch (Exception e) {
+            log.error("Ошибка индексации страницы", e);
+
+            site.setLastError(e.getMessage());
+            siteRepository.save(site);
+
+            return new ResponseEntity<>(
+                    new ResponseString(false, "Error during page indexing: " + e.getMessage()),
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
 
@@ -176,6 +187,12 @@ public class IndexingService {
         return pageDTO;
     }
 
+    private Optional<SiteConfig> findSiteConfig(String url) {
+        return sitesList.getSites().stream()
+                .filter(siteConfig -> url.startsWith(siteConfig.getUrl()))
+                .findFirst();
+    }
+
     private List<Page> addSiteToPage(Site site, List<Page> pages) {
         for (Page page : pages) {
             page.setSite(site);
@@ -188,6 +205,7 @@ public class IndexingService {
         site.setUrl(siteConfig.getUrl());
         site.setName(siteConfig.getName());
         site.setStatusTime(LocalDateTime.now());
+        site.setLastError("");
         site.setStatus(INDEXING);
         return site;
     }

@@ -29,12 +29,21 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://www.svetlovka.ru
+    - url: https://www.svetlovka.ru/
       name: Svetlovka.ru
-#    - url: https://www.playback.ru
-#      name: PlayBack.Ru
+    - url: http://www.playback.ru/
+      name: PlayBack.Ru
+    - url: https://et-cetera.ru/mobile/
+      name: Et-Cetera.ru
 
-#connection-setting:
-#  userAgent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) YandexBrowser/21.9.0.1234.0 Chrome/93.0.4577.82 Safari/537.36
-#  referrer: http://www.example.com
 
+connection-settings:
+  settings:
+  - userAgent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.82 Safari/537.36
+    referrer: http://www.google.com
+  - userAgent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Safari/605.1.15
+    referrer: http://www.bing.com
+  - userAgent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) YandexBrowser/21.9.0.1234.0 Chrome/93.0.4577.82 Safari/537.36
+    referrer: http://www.yahoo.com
+  - userAgent: Mozilla/5.0 (Linux; Android 10; SM-G960U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.62 Mobile Safari/537.36
+    referrer: http://www.example.com
