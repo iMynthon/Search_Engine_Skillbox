@@ -1,17 +1,15 @@
-package searchengine.until;
+package searchengine.until.CustomResponse;
 
 import lombok.Getter;
 import lombok.ToString;
 
-import java.util.List;
-
 @Getter
 @ToString
-public class ResponseFormat {
+public class ResponseBoolean {
 
     private final Boolean result;
 
-    public ResponseFormat(Boolean result) {
+    public ResponseBoolean(Boolean result) {
         this.result = result;
     }
 }

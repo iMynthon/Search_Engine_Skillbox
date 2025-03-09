@@ -5,6 +5,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "lemma")
 @Getter
@@ -16,7 +19,7 @@ public class Lemma {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @OneToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "site_id")
     private Site site;
 
@@ -25,4 +28,8 @@ public class Lemma {
 
     @Column(name = "frequency")
     private Integer frequency;
+
+    @OneToMany(mappedBy = "lemma",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
+    private List<Indices> indicesList;
+
 }

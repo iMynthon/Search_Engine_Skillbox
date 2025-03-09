@@ -1,19 +1,13 @@
 package searchengine.controllers;
 
 import jakarta.validation.constraints.NotBlank;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import searchengine.dto.site.SiteDTO;
 import searchengine.dto.statistics.StatisticsResponse;
-import searchengine.model.Page;
 import searchengine.model.Site;
-import searchengine.services.IndexingService;
+import searchengine.services.IndexingSiteService;
 import searchengine.services.StatisticsService;
-import searchengine.until.ResponseFormat;
-
-import java.util.Map;
-import java.util.Objects;
+import searchengine.until.CustomResponse.ResponseBoolean;
 
 @RestController
 @RequestMapping("/api")
@@ -21,11 +15,11 @@ public class ApiController {
 
     private final StatisticsService statisticsService;
 
-    private final IndexingService indexingService;
+    private final IndexingSiteService indexingSiteService;
 
-    public ApiController(StatisticsService statisticsService, IndexingService indexingService) {
+    public ApiController(StatisticsService statisticsService, IndexingSiteService indexingSiteService) {
         this.statisticsService = statisticsService;
-        this.indexingService = indexingService;
+        this.indexingSiteService = indexingSiteService;
     }
 
     @GetMapping("/statistics")
@@ -35,24 +29,24 @@ public class ApiController {
 
 
     @GetMapping("/startIndexing")
-    public ResponseEntity<ResponseFormat> startIndexing(){
-       return indexingService.startIndexingSite();
+    public ResponseEntity<ResponseBoolean> startIndexing(){
+       return indexingSiteService.startIndexingSite();
     }
 
 
     @GetMapping("/stopIndexing")
-    public ResponseEntity<ResponseFormat> stopIndexing(){
-       return indexingService.stopIndexing();
+    public ResponseEntity<ResponseBoolean> stopIndexing(){
+       return indexingSiteService.stopIndexing();
     }
 
     @DeleteMapping("/delete/{id}")
-    public ResponseEntity<ResponseFormat> delete(@PathVariable Integer id){
-        return indexingService.deleteSiteIndexing(id);
+    public ResponseEntity<ResponseBoolean> delete(@PathVariable Integer id){
+        return indexingSiteService.deleteSiteIndexing(id);
     }
 
     @PostMapping("/indexPage")
-    public ResponseEntity<ResponseFormat> IndexPage(@RequestBody @NotBlank String url){
-        return indexingService.indexPage(url);
+    public ResponseEntity<ResponseBoolean> IndexPage(@RequestBody @NotBlank String url){
+        return indexingSiteService.indexPage(url);
     }
 
     @GetMapping

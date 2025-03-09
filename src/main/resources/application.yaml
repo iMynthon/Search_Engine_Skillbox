@@ -11,9 +11,10 @@ spring:
     properties:
       hibernate:
         jdbc:
-        batch_size: 50
+        batch_size: 20
         order_inserts: true
-        generate_statistics: false
+        order_updates: true
+        generate_statistics: enable
     show-sql: true
     hibernate:
       ddl-auto: none
@@ -29,13 +30,10 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://www.svetlovka.ru/
+    - url: https://ruweb.net/
       name: Svetlovka.ru
     - url: http://www.playback.ru/
       name: PlayBack.Ru
-    - url: https://et-cetera.ru/mobile/
-      name: Et-Cetera.ru
-
 
 connection-settings:
   settings:

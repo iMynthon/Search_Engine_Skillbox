@@ -7,8 +7,10 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import searchengine.config.ConnectionSetting;
+import searchengine.exception.IndexingException;
 import searchengine.model.Page;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -58,12 +60,11 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         }
         visitedUrls.add(another_url);
 
-        log.info("Indexing url: {}", another_url);
+        log.info("Индексация URL: {}", another_url);
 
         List<SiteCrawler> crawler = new CopyOnWriteArrayList<>();
 
         try {
-
             Connection.Response response = Jsoup.connect(another_url)
                     .userAgent(getRandomSetting().getUserAgent())
                     .referrer(getRandomSetting().getReferrer())
@@ -79,6 +80,12 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             pages.add(currentPage);
 
             for (Element element : elements) {
+
+                if(Thread.interrupted()){
+                    Thread.currentThread().interrupt();
+                    return pages;
+                }
+
                 String abshref = element.attr("abs:href");
                 if (isValidLink(abshref.trim())) {
                     SiteCrawler siteCrawler = new SiteCrawler(abshref, visitedUrls, setting);
@@ -89,20 +96,28 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             }
 
             for (SiteCrawler siteCrawler : crawler) {
+                if(Thread.interrupted()){
+                    Thread.currentThread().interrupt();
+                    return pages;
+                }
                 List<Page> resultPages = siteCrawler.join();
                 pages.addAll(resultPages);
             }
 
-        } catch (Exception e) {
-            log.info("Invalid url: {}", another_url);
+        } catch (IOException e) {
+            log.info("Недействительный URL: {}", another_url);
             currentPage.setCode(500);
-            currentPage.setContent(e.getMessage());
+            currentPage.setContent(e.getMessage().isEmpty() ? "Индексация остановлена пользователей" : e.getMessage());
             pages.add(currentPage);
         }
         return pages;
     }
 
     public boolean isValidLink(String urls) {
+        if(Thread.interrupted()){
+            Thread.currentThread().interrupt();
+            return false;
+        }
         return urls.startsWith(HEAD_URL) && !urls.contains("#") && !visitedUrls.contains(urls)
                 && !FILE_PATTERN.matcher(urls).matches();
 

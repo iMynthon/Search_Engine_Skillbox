@@ -42,4 +42,7 @@ public class Site {
     @OneToMany(mappedBy = "site",cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Page> page;
 
+    @OneToMany(mappedBy = "site", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Lemma> lemma;
+
 }

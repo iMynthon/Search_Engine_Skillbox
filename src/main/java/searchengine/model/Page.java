@@ -6,6 +6,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "page")
 @Getter
@@ -30,6 +33,9 @@ public class Page {
 
     @Column(name = "content")
     private String content;
+
+    @OneToMany(mappedBy = "page",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
+    private List<Indices> indicesList;
 
     public Page(String path) {
         this.path = path;
