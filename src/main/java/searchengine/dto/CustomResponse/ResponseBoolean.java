@@ -1,10 +1,12 @@
-package searchengine.until.CustomResponse;
+package searchengine.dto.CustomResponse;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 @Getter
 @ToString
+@NoArgsConstructor(force = true)
 public class ResponseBoolean {
 
     private final Boolean result;

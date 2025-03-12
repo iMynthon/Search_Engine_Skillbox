@@ -8,7 +8,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class AppError {
 
-    Integer statusCode;
+    Boolean result;
 
-    String exceptionMessage;
+    String error;
 }

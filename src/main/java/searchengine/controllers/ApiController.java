@@ -1,41 +1,41 @@
 package searchengine.controllers;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.model.Site;
 import searchengine.services.IndexingSiteService;
 import searchengine.services.StatisticsService;
-import searchengine.until.CustomResponse.ResponseBoolean;
+import searchengine.dto.CustomResponse.ResponseBoolean;
+
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api")
+@RequiredArgsConstructor
 public class ApiController {
 
     private final StatisticsService statisticsService;
 
     private final IndexingSiteService indexingSiteService;
 
-    public ApiController(StatisticsService statisticsService, IndexingSiteService indexingSiteService) {
-        this.statisticsService = statisticsService;
-        this.indexingSiteService = indexingSiteService;
-    }
-
     @GetMapping("/statistics")
     public ResponseEntity<StatisticsResponse> statistics() {
         return ResponseEntity.ok(statisticsService.getStatistics());
     }
 
-
+    @ResponseStatus(HttpStatus.OK)
     @GetMapping("/startIndexing")
-    public ResponseEntity<ResponseBoolean> startIndexing(){
+    public CompletableFuture<ResponseBoolean> startIndexing(){
        return indexingSiteService.startIndexingSite();
     }
 
-
+    @ResponseStatus(HttpStatus.OK)
     @GetMapping("/stopIndexing")
-    public ResponseEntity<ResponseBoolean> stopIndexing(){
+    public CompletableFuture<ResponseBoolean> stopIndexing(){
        return indexingSiteService.stopIndexing();
     }
 
@@ -44,8 +44,9 @@ public class ApiController {
         return indexingSiteService.deleteSiteIndexing(id);
     }
 
+    @ResponseStatus(HttpStatus.OK)
     @PostMapping("/indexPage")
-    public ResponseEntity<ResponseBoolean> IndexPage(@RequestBody @NotBlank String url){
+    public CompletableFuture<ResponseBoolean> IndexPage(@RequestBody @NotBlank String url){
         return indexingSiteService.indexPage(url);
     }
 

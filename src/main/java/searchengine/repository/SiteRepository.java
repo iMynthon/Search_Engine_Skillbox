@@ -10,7 +10,6 @@ import java.util.Optional;
 @Repository
 public interface SiteRepository extends JpaRepository<Site, Integer> {
 
-    @Query("select u from Site u where u.url = :url")
     Site findByUrl(String url);
 
     boolean existsByUrl (String url);

@@ -11,18 +11,18 @@ spring:
     properties:
       hibernate:
         jdbc:
-        batch_size: 20
+        batch_size: 50
         order_inserts: true
         order_updates: true
-        generate_statistics: enable
+        generate_statistics: true
     show-sql: true
     hibernate:
       ddl-auto: none
 
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
-    enabled: false
-    drop-first: false
+    enabled: true
+    drop-first: true
 
   output:
     ansi:
@@ -30,7 +30,7 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://ruweb.net/
+    - url: https://www.svetlovka.ru/
       name: Svetlovka.ru
     - url: http://www.playback.ru/
       name: PlayBack.Ru

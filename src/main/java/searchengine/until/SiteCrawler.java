@@ -7,7 +7,6 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import searchengine.config.ConnectionSetting;
-import searchengine.exception.IndexingException;
 import searchengine.model.Page;
 
 import java.io.IOException;
@@ -24,7 +23,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
     private static String HEAD_URL;
 
-    private final String another_url;
+    private String another_url;
 
     private final Set<String> visitedUrls;
 
@@ -48,8 +47,15 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         this.setting = connectionSetting;
     }
 
+    public SiteCrawler(String prefixUrl,String another_url,ConnectionSetting setting){
+        HEAD_URL = startWithPrefixUrl(prefixUrl);
+        this.another_url = another_url;
+        this.setting = setting;
+        this.visitedUrls = ConcurrentHashMap.newKeySet();
+    }
+
     @Override
-    protected List<Page> compute() {
+    public List<Page> compute() {
 
         Page currentPage = new Page(another_url.substring(HEAD_URL.length()));
 
@@ -109,6 +115,9 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             currentPage.setCode(500);
             currentPage.setContent(e.getMessage().isEmpty() ? "Индексация остановлена пользователей" : e.getMessage());
             pages.add(currentPage);
+            if(Thread.interrupted()){
+                Thread.currentThread().interrupt();
+            }
         }
         return pages;
     }
@@ -121,6 +130,10 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         return urls.startsWith(HEAD_URL) && !urls.contains("#") && !visitedUrls.contains(urls)
                 && !FILE_PATTERN.matcher(urls).matches();
 
+    }
+
+    public String startWithPrefixUrl(String url){
+        return HEAD_URL.substring(0,url.length());
     }
 
     public ConnectionSetting.Setting getRandomSetting(){

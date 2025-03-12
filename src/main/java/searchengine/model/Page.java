@@ -6,7 +6,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -18,7 +17,8 @@ import java.util.List;
 public class Page {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "page_id_seq")
+    @SequenceGenerator(name = "page_seq",sequenceName = "page_id_seq")
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -35,7 +35,7 @@ public class Page {
     private String content;
 
     @OneToMany(mappedBy = "page",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
-    private List<Indices> indicesList;
+    private List<Index> indexList;
 
     public Page(String path) {
         this.path = path;

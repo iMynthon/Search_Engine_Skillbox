@@ -3,8 +3,8 @@ databaseChangeLog:
       id: 1
       author: Mynthon
       changes:
-        - sql:
-            sql: CREATE TYPE indexing_status AS ENUM ('INDEXING', 'INDEXED', 'FAILED');
+#        - sql:
+#            sql: CREATE TYPE indexing_status AS ENUM ('INDEXING', 'INDEXED', 'FAILED');
         - createTable:
             tableName: site
             columns:
@@ -42,18 +42,23 @@ databaseChangeLog:
       id: 2
       author: Mynthon
       changes:
+        - createSequence:
+            sequenceName: page_id_seq
+            startValue: 1
+            incrementBy: 50
         - createTable:
             tableName: page
             columns:
               - column:
                   name: id
-                  type: serial
+                  type: bigint
                   constraints:
                     primaryKey: true
                     nullable: false
+                    defaultSequenceNext: page_id_seq
               - column:
                   name: site_id
-                  type: int
+                  type: bigint
                   constraints:
                     foreignKeyName: fk_site
                     references: site(id)
@@ -89,18 +94,23 @@ databaseChangeLog:
       id: 4
       author: Mynthon
       changes:
+        - createSequence:
+            sequenceName: lemma_id_seq
+            startValue: 1
+            incrementBy: 50
         - createTable:
             tableName: lemma
             columns:
               - column:
                   name: id
-                  type: serial
+                  type: bigint
                   constraints:
                     primaryKey: true
                     nullable: false
+                    defaultSequenceNext: lemma_id_seq
               - column:
                   name: site_id
-                  type: int
+                  type: bigint
                   constraints:
                     foreignKeyName: fk_site
                     references: site(id)
@@ -120,25 +130,30 @@ databaseChangeLog:
       id: 5
       author: Mynthon
       changes:
+        - createSequence:
+            sequenceName: index_id_seq
+            startValue: 1
+            incrementBy: 50
         - createTable:
-            tableName: indices
+            tableName: index
             columns:
               - column:
                   name: id
-                  type: serial
+                  type: bigint
                   constraints:
                     primaryKey: true
                     nullable: false
+                    defaultSequenceNext: index_id_seq
               - column:
                   name: page_id
-                  type: int
+                  type: bigint
                   constraints:
                     foreignKeyName: fk_page
                     references: page(id)
                     nullable: false
               - column:
                   name: lemma_id
-                  type: int
+                  type: bigint
                   constraints:
                     foreignKeyName: fk_lemma
                     references: lemma(id)
@@ -148,4 +163,3 @@ databaseChangeLog:
                   type: float
                   constraints:
                     nullable: false
-

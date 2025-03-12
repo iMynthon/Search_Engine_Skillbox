@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -16,7 +15,8 @@ import java.util.List;
 public class Lemma {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "lemma_id_seq")
+    @SequenceGenerator(name = "lemma_seq",sequenceName = "lemma_id_seq")
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -30,6 +30,6 @@ public class Lemma {
     private Integer frequency;
 
     @OneToMany(mappedBy = "lemma",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
-    private List<Indices> indicesList;
+    private List<Index> indexList;
 
 }

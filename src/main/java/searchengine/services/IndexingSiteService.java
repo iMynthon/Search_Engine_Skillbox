@@ -1,6 +1,6 @@
 package searchengine.services;
 
-import jakarta.persistence.EntityManager;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -9,31 +9,31 @@ import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.ConnectionSetting;
 import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
-import searchengine.model.Indices;
+import searchengine.exception.IndexingSitesException;
+import searchengine.exception.ResourcesNotFoundException;
 import searchengine.model.Lemma;
 import searchengine.model.Page;
 import searchengine.model.Site;
-import searchengine.repository.IndicesRepository;
+import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
-import searchengine.until.CustomResponse.ResponseBoolean;
-import searchengine.until.CustomResponse.ResponseError;
+import searchengine.dto.CustomResponse.ResponseBoolean;
+import searchengine.dto.CustomResponse.ResponseError;
 import searchengine.until.LemmaFinder;
 import searchengine.until.SiteCrawler;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static searchengine.model.Status.*;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class IndexingSiteService {
 
     private final SiteRepository siteRepository;
@@ -41,93 +41,74 @@ public class IndexingSiteService {
     private final LemmaRepository lemmaRepository;
     private final SitesList sitesList;
     private final ConnectionSetting connectionSetting;
-    private final IndicesRepository indicesRepository;
+    private final IndexRepository indexRepository;
+
     private ForkJoinPool pool;
 
-    private EntityManager entityManager;
+    private final AtomicBoolean isIndexingRunning = new AtomicBoolean(false);
 
-    private final Object startLock = new Object();
-
-    private final Object stopLock = new Object();
-
-    public IndexingSiteService(SiteRepository siteRepository, PageRepository pageRepository,LemmaRepository lemmaRepository, IndicesRepository indicesRepository,
-                               SitesList sitesList, ConnectionSetting connectionSetting) {
-        this.siteRepository = siteRepository;
-        this.pageRepository = pageRepository;
-        this.sitesList = sitesList;
-        this.connectionSetting = connectionSetting;
-        this.lemmaRepository = lemmaRepository;
-        this.indicesRepository = indicesRepository;
-    }
-
-    public ResponseEntity<ResponseBoolean> startIndexingSite() {
-
-        if (pool != null && !pool.isShutdown()) {
-            return new ResponseEntity<>(
-                    new ResponseError(false, "Индексация уже запущена")
-                    , HttpStatus.BAD_REQUEST);
+    @Transactional
+    public CompletableFuture<ResponseBoolean> startIndexingSite() {
+        if (isIndexingRunning.get()) {
+            log.info("Индексация уже запущена");
+            return CompletableFuture.completedFuture(new ResponseError(new Exception()));
         }
 
-        pool = new ForkJoinPool();
-      synchronized (startLock) {
-          for (SiteConfig siteConfig : sitesList.getSites()) {
-              if(siteRepository.existsByUrl(siteConfig.getUrl())){
-                  log.info("Этот сайт уже проиндексирован: {}",siteConfig);
-                  continue;
-              }
+        isIndexingRunning.set(true);
+        log.info("Индексация запущена");
 
-              log.info("Индексация сайта: {}", siteConfig.getUrl());
 
-              Site site = initSite(siteConfig);
-              log.info(site.getUrl());
-              siteRepository.saveAndFlush(site);
+        pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors()
+                , ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+                null, true);
 
-              try {
-                  List<Page> pages = pool.invoke(new SiteCrawler(siteConfig.getUrl(), connectionSetting));
-                  site.setPage(addSiteToPage(site, pages));
+        pool.execute(() -> {
+            for (SiteConfig siteConfig : sitesList.getSites()) {
 
-                  List<Lemma> listLemma = findLemmaToText(site,pages);
-                  site.setLemma(listLemma);
-
-                  site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
-                  pageRepository.saveAllAndFlush(pages);
-                  lemmaRepository.saveAllAndFlush(listLemma);
-
-              } catch (Exception e) {
-                  log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
-                  site.setStatus(FAILED);
-                  site.setLastError(e.getMessage());
-                  siteRepository.save(site);
-                  return new ResponseEntity<>(
-                          new ResponseError(false, "Ошибка при индексация сайта: "
-                                  + siteConfig.getUrl() + " - " + e.getMessage()),
-                          HttpStatus.INTERNAL_SERVER_ERROR);
-              }
-          }
-      }
-        log.info("Список проиндексированных сайтов: {}", sitesList);
-        return new ResponseEntity<>(
-                new ResponseBoolean(true), HttpStatus.OK);
-    }
-
-    public ResponseEntity<ResponseBoolean> stopIndexing() {
-        synchronized (stopLock) {
-            try {
-                if (!pool.isShutdown()) {
-                    log.info("Остановка индексации");
-                    pool.shutdownNow();
-                    if(pool.awaitTermination(60,TimeUnit.SECONDS)){
-                        pool.shutdownNow();
-                    }
-                    pool = null;
-                    return new ResponseEntity<>(new ResponseBoolean(true), HttpStatus.OK);
+                if (siteRepository.existsByUrl(siteConfig.getUrl())) {
+                    log.info("Этот сайт уже проиндексирован: {}", siteConfig);
+                    continue;
+                } else if (pool.isShutdown()) {
+                    log.info("Индексация остановлена");
+                    break;
                 }
-            } catch (Exception e) {
-                log.error("Ошибка остановки потока: {}", e.getMessage());
+
+                log.info("Индексация сайта: {}", siteConfig.getUrl());
+
+                Site site = initSite(siteConfig);
+
+                siteRepository.save(site);
+                try {
+                    List<Page> pages = new SiteCrawler(siteConfig.getUrl(), connectionSetting).compute();
+                    site.setPage(addSiteToPage(site, pages));
+
+                    List<Lemma> listLemma = findLemmaToText(site, pages);
+                    site.setLemma(listLemma);
+
+                    site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
+                    pageRepository.saveAll(pages);
+                    lemmaRepository.saveAll(listLemma);
+
+                } catch (Exception e) {
+                    log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
+                    site.setStatus(FAILED);
+                    site.setLastError(pool.isShutdown() ? "" : e.getMessage());
+                    siteRepository.save(site);
+                }
+                log.info("Сайт про индексирован: {}", siteConfig);
             }
+        });
+        isIndexingRunning.set(false);
+        return CompletableFuture.completedFuture(new ResponseBoolean(true));
+
+    }
+
+    public CompletableFuture<ResponseBoolean> stopIndexing() {
+        if (!pool.isShutdown()) {
+            pool.shutdownNow();
+            return CompletableFuture.completedFuture(new ResponseBoolean(true));
         }
-        return new ResponseEntity<>(new ResponseError(false, "Индексация не запущена")
-                , HttpStatus.BAD_REQUEST);
+        throw new IndexingSitesException("Индексация не запущена");
 
     }
 
@@ -139,146 +120,78 @@ public class IndexingSiteService {
         return new ResponseEntity<>(new ResponseBoolean(true), HttpStatus.OK);
     }
 
-    public ResponseEntity<ResponseBoolean> indexPage(String url) {
-        String cleanedUrl = url.substring(url.indexOf("h"),url.lastIndexOf('"'));
+    @Transactional
+    public CompletableFuture<ResponseBoolean> indexPage(String url) {
+        String cleanedUrl = url.substring(url.indexOf("h"), url.lastIndexOf('"'));
 
-        Optional<SiteConfig> siteConfig = checkPageToSiteConfig(cleanedUrl);
-
-        if (siteConfig.isEmpty()) {
-            return new ResponseEntity<>(
-                    new ResponseError(false, "Данная страница находится за пределами сайтов, указанных в конфигурационном файле"),
-                    HttpStatus.NOT_FOUND);
-        } else if(!checkIndexingPage(url,siteConfig.get())){
-            return new ResponseEntity<>(
-                    new ResponseError(false,"Данная страница уже проиндексирована"),HttpStatus.BAD_REQUEST);
+        SiteConfig siteConfig = checkPageToSiteConfig(cleanedUrl).orElseThrow(() -> new ResourcesNotFoundException(
+                "Данная страница находится за переделами конфигурационных файлов"));
+        if (checkIndexingPage(url, siteConfig)) {
+            return CompletableFuture.completedFuture(new ResponseError(
+                    new IndexingSitesException("Данная страница уже проиндексирована")));
         }
 
-        Site site = siteRepository.findByUrl(siteConfig.get().getUrl());
+        Site site = siteRepository.findByUrl(siteConfig.getUrl());
 
-        try {
-            pool = new ForkJoinPool();
-            List<Page> pages = pool.invoke(new SiteCrawler(cleanedUrl, connectionSetting));
+        pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors()
+                , ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+                null, true);
 
-            site.setPage(addSiteToPage(site, pages));
-            site.setLemma(findLemmaToText(site,pages));
+        pool.execute(() -> {
+            try {
+                List<Page> pages = new SiteCrawler(siteConfig.getUrl(), cleanedUrl, connectionSetting).compute();
 
-            pageRepository.saveAll(pages);
+                site.setPage(addSiteToPage(site, pages));
+                site.setLemma(findLemmaToText(site, pages));
 
-            return new ResponseEntity<>(new ResponseBoolean(true), HttpStatus.CREATED);
-        } catch (Exception e) {
-            log.error("Ошибка индексации страницы", e);
+                pageRepository.saveAll(pages);
 
-            site.setLastError(e.getMessage());
-            siteRepository.save(site);
+            } catch (Exception e) {
+                log.error(e.getMessage());
+                site.setLastError(e.getMessage());
+                siteRepository.save(site);
+            }
+        });
 
-            return new ResponseEntity<>(
-                    new ResponseError(false, "Ошибка индексации страницы: " + e.getMessage()),
-                    HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return CompletableFuture.completedFuture(new ResponseBoolean(true));
     }
 
-
-//    public static Site siteMapToEntity(SiteDTO siteDTO) {
-//        Site site = new Site();
-//        site.setId(siteDTO.getId());
-//        site.setStatus(siteDTO.getStatus());
-//        site.setStatusTime(siteDTO.getStatusTime());
-//        site.setLastError(siteDTO.getLastError());
-//        site.setUrl(siteDTO.getUrl());
-//        site.setName(siteDTO.getName());
-//        site.setPage(siteDTO.getPage()
-//                .stream()
-//                .map(IndexingSiteService::pageMapToEntity)
-//                .toList());
-//        return site;
-//    }
-//
-//    public static SiteDTO siteMapToDTO(Site site) {
-//        SiteDTO siteDTO = new SiteDTO();
-//        siteDTO.setId(site.getId());
-//        siteDTO.setStatus(site.getStatus());
-//        siteDTO.setStatusTime(site.getStatusTime());
-//        siteDTO.setLastError(site.getLastError());
-//        siteDTO.setUrl(site.getUrl());
-//        siteDTO.setName(site.getName());
-//        siteDTO.setPage(site.getPage()
-//                .stream()
-//                .map(IndexingSiteService::pageMapToDTO)
-//                .toList());
-//        return siteDTO;
-//    }
-
-//    public static Page pageMapToEntity(PageDTO pageDTO) {
-//        Page page = new Page();
-//        page.setId(pageDTO.getId());
-//        page.setPath(pageDTO.getPath());
-//        page.setCode(pageDTO.getCode());
-//        page.setContent(pageDTO.getContent());
-//        return page;
-//    }
-//
-//
-//    public static PageDTO pageMapToDTO(Page page) {
-//        PageDTO pageDTO = new PageDTO();
-//        pageDTO.setId(page.getId());
-//        pageDTO.setSite(page.getSite().getUrl());
-//        pageDTO.setPath(page.getPath());
-//        pageDTO.setCode(page.getCode());
-//        pageDTO.setContent(page.getContent());
-//        return pageDTO;
-//    }
-
     private Optional<SiteConfig> checkPageToSiteConfig(String url) {
-        for(SiteConfig siteConfig : sitesList.getSites()){
-             if(url.startsWith(siteConfig.getUrl())){
-                 return Optional.of(siteConfig);
-             }
+        for (SiteConfig siteConfig : sitesList.getSites()) {
+            if (url.startsWith(siteConfig.getUrl())) {
+                return Optional.of(siteConfig);
+            }
         }
         return Optional.empty();
     }
 
-    private List<Lemma> findLemmaToText(Site site,List<Page> pages) {
-        Map<Page,Map<String,Integer>> lemmasAndPage = new ConcurrentHashMap<>();
+    private List<Lemma> findLemmaToText(Site site, List<Page> pages) {
+        Map<String, Integer> allLemmas = new ConcurrentHashMap<>();
         pages.parallelStream().forEach(page -> {
             try {
                 LemmaFinder lemmaFinder = LemmaFinder.getInstance();
                 Map<String, Integer> currentLemmas = lemmaFinder.collectLemmas(page.getContent());
-                lemmasAndPage.put(page,currentLemmas);
+                currentLemmas.forEach((lemma, count) -> {
+                    allLemmas.merge(lemma, count, (oldValue, newValue) -> newValue);
+                });
             } catch (IOException e) {
                 log.error("Ошибка при лемматизации страницы: {}", page.getPath(), e);
             }
         });
-        List<Indices> indicesList = new CopyOnWriteArrayList<>();
-        List<Lemma> lemmaList = new ArrayList<>();
-        lemmasAndPage.forEach((page, lemmas) -> lemmas.forEach((key, value) -> {
 
-//            Lemma lemma = lemmaRepository.findByLemmaAndSite(key, site.getId())
-//                    .orElseGet(() -> {
-//                        Lemma newLemma = new Lemma();
-//                        newLemma.setLemma(key);
-//                        newLemma.setFrequency(0);
-//                        newLemma.setSite(site);
-//                        return newLemma;
-//                    });
-
-            Lemma lemma = new Lemma();
-            lemma.setSite(site);
-            lemma.setLemma(key);
-            lemma.setFrequency(value);
-            lemmaList.add(lemma);
-
-            Indices indices = new Indices();
-            indices.setPage(page);
-            indices.setLemma(lemma);
-            indices.setRank((float) value);
-            indicesList.add(indices);
-        }));
-
-        indicesRepository.saveAll(indicesList);
-        return lemmaList;
+        return allLemmas.entrySet()
+                .parallelStream()
+                .map(entry -> {
+                    Lemma lemma = new Lemma();
+                    lemma.setSite(site);
+                    lemma.setLemma(entry.getKey());
+                    lemma.setFrequency(entry.getValue());
+                    return lemma;
+                })
+                .toList();
     }
 
-    private boolean checkIndexingPage(String url,SiteConfig siteConfig){
+    private boolean checkIndexingPage(String url, SiteConfig siteConfig) {
         String path = url.substring(siteConfig.getUrl().length());
         return pageRepository.existsByPath(path);
     }
