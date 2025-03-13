@@ -32,4 +32,10 @@ public class Lemma {
     @OneToMany(mappedBy = "lemma",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
     private List<Index> indexList;
 
+
+    public Lemma(Site site, String lemma, Integer frequency) {
+        this.site = site;
+        this.lemma = lemma;
+        this.frequency = frequency;
+    }
 }
