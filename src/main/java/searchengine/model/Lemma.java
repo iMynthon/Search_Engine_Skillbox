@@ -16,7 +16,7 @@ public class Lemma {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "lemma_id_seq")
-    @SequenceGenerator(name = "lemma_seq",sequenceName = "lemma_id_seq")
+    @SequenceGenerator(name = "lemma_id_seq",sequenceName = "lemma_id_seq")
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)

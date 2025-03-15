@@ -18,7 +18,7 @@ public class Page {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "page_id_seq")
-    @SequenceGenerator(name = "page_seq",sequenceName = "page_id_seq")
+    @SequenceGenerator(name = "page_id_seq",sequenceName = "page_id_seq")
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.ConnectionSetting;
@@ -25,9 +27,13 @@ import searchengine.dto.CustomResponse.ResponseError;
 import searchengine.until.LemmaFinder;
 import searchengine.until.SiteCrawler;
 
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -46,7 +52,7 @@ public class IndexingSiteService {
     private final SitesList sitesList;
     private final ConnectionSetting connectionSetting;
     private final IndexRepository indexRepository;
-
+    private final JdbcTemplate jdbcTemplate;
     private ForkJoinPool pool;
 
     private final AtomicBoolean isIndexingRunning = new AtomicBoolean(false);
@@ -93,6 +99,9 @@ public class IndexingSiteService {
                     pageRepository.saveAll(pages);
                     lemmaRepository.saveAll(lemmaAndIndex.getLeft());
                     indexRepository.saveAll(lemmaAndIndex.getRight());
+                    pageRepository.flush();
+                    lemmaRepository.flush();
+                    indexRepository.flush();
 
                 } catch (Exception e) {
                     log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
@@ -178,7 +187,7 @@ public class IndexingSiteService {
     }
 
     private Pair<List<Lemma>,List<Index>> findLemmaToText(Site site, List<Page> pages) {
-        Map<String, Lemma> allLemmas = new ConcurrentHashMap<>(); // Изменили на Map<String, Lemma>
+        Map<String, Lemma> allLemmas = new ConcurrentHashMap<>();
         List<Index> indexList = new ArrayList<>();
 
         pages.parallelStream().forEach(page -> {
@@ -218,6 +227,42 @@ public class IndexingSiteService {
         pages.forEach(p -> p.setSite(site));
         return pages;
     }
+
+//    private void batchLemmaInsert(List<Lemma> lemmaList){
+//        String sql = "INSERT INTO \"lemma\" (site_id,lemma,frequency) VALUES (?,?,?)";
+//        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+//            @Override
+//            public void setValues(PreparedStatement ps, int i) throws SQLException {
+//                Lemma lemma = lemmaList.get(i);
+//                ps.setInt(1,lemma.getSite().getId());
+//                ps.setString(2,lemma.getLemma());
+//                ps.setInt(3,lemma.getFrequency());
+//            }
+//
+//            @Override
+//            public int getBatchSize() {
+//                return lemmaList.size();
+//            }
+//        });
+//    }
+//
+//    private void batchIndexInsert(List<Index> indexList){
+//        String sql = "INSERT INTO \"index\" (page_id,lemma_id,rank) VALUES (?,?,?)";
+//        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+//            @Override
+//            public void setValues(PreparedStatement ps, int i) throws SQLException {
+//                Index index = indexList.get(i);
+//                ps.setObject(1,index.getPage());
+//                ps.setObject(2,index.getLemma());
+//                ps.setFloat(3,index.getRank());
+//            }
+//
+//            @Override
+//            public int getBatchSize() {
+//                return indexList.size();
+//            }
+//        });
+//    }
 
     private Site initSite(SiteConfig siteConfig) {
         Site site = new Site();

@@ -51,14 +51,14 @@ databaseChangeLog:
             columns:
               - column:
                   name: id
-                  type: bigint
+                  type: serial
                   constraints:
                     primaryKey: true
                     nullable: false
                     defaultSequenceNext: page_id_seq
               - column:
                   name: site_id
-                  type: bigint
+                  type: int
                   constraints:
                     foreignKeyName: fk_site
                     references: site(id)
@@ -103,14 +103,14 @@ databaseChangeLog:
             columns:
               - column:
                   name: id
-                  type: bigint
+                  type: serial
                   constraints:
                     primaryKey: true
                     nullable: false
                     defaultSequenceNext: lemma_id_seq
               - column:
                   name: site_id
-                  type: bigint
+                  type: int
                   constraints:
                     foreignKeyName: fk_site
                     references: site(id)
@@ -139,21 +139,21 @@ databaseChangeLog:
             columns:
               - column:
                   name: id
-                  type: bigint
+                  type: serial
                   constraints:
                     primaryKey: true
                     nullable: false
                     defaultSequenceNext: index_id_seq
               - column:
                   name: page_id
-                  type: bigint
+                  type: int
                   constraints:
                     foreignKeyName: fk_page
                     references: page(id)
                     nullable: false
               - column:
                   name: lemma_id
-                  type: bigint
+                  type: int
                   constraints:
                     foreignKeyName: fk_lemma
                     references: lemma(id)

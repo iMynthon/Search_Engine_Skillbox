@@ -14,7 +14,7 @@ public class Index {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "index_id_seq")
-    @SequenceGenerator(name = "index_seq",sequenceName = "index_id_seq")
+    @SequenceGenerator(name = "index_id_seq",sequenceName = "index_id_seq")
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
