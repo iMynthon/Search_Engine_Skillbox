@@ -1,6 +1,7 @@
 package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
@@ -8,26 +9,28 @@ import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.dto.statistics.TotalStatistics;
+import searchengine.model.Site;
+import searchengine.repository.LemmaRepository;
+import searchengine.repository.PageRepository;
+import searchengine.repository.SiteRepository;
 
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalField;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 @Service
 @RequiredArgsConstructor
-public class StatisticsServiceImpl implements StatisticsService {
+public class StatisticsServiceImpl {
 
-    private final Random random = new Random();
     private final SitesList sites;
 
-    @Override
+    private final PageRepository pageRepository;
+    private final LemmaRepository lemmaRepository;
+    private final SiteRepository siteRepository;
+
     public StatisticsResponse getStatistics() {
-        String[] statuses = { "INDEXED", "FAILED", "INDEXING" };
-        String[] errors = {
-                "Ошибка индексации: главная страница сайта не доступна",
-                "Ошибка индексации: сайт не доступен",
-                ""
-        };
 
         TotalStatistics total = new TotalStatistics();
         total.setSites(sites.getSites().size());
@@ -35,19 +38,18 @@ public class StatisticsServiceImpl implements StatisticsService {
 
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         List<SiteConfig> sitesList = sites.getSites();
-        for(int i = 0; i < sitesList.size(); i++) {
-            SiteConfig site = sitesList.get(i);
+        for(SiteConfig siteConfig : sitesList) {
             DetailedStatisticsItem item = new DetailedStatisticsItem();
-            item.setName(site.getName());
-            item.setUrl(site.getUrl());
-            int pages = random.nextInt(1_000);
-            int lemmas = pages * random.nextInt(1_000);
+            item.setName(siteConfig.getName());
+            item.setUrl(siteConfig.getUrl());
+            Site site = siteRepository.findByUrl(siteConfig.getUrl());
+            int pages = pageRepository.countPagesToSite(site.getId());
+            int lemmas = lemmaRepository.countLemmaToSite(site.getId());
             item.setPages(pages);
             item.setLemmas(lemmas);
-            item.setStatus(statuses[i % 3]);
-            item.setError(errors[i % 3]);
-            item.setStatusTime(System.currentTimeMillis() -
-                    (random.nextInt(10_000)));
+            item.setStatus(site.getStatus().toString());
+            item.setError(site.getLastError());
+            item.setStatusTime(site.getStatusTime().getLong(ChronoField.MILLI_OF_SECOND));
             total.setPages(total.getPages() + pages);
             total.setLemmas(total.getLemmas() + lemmas);
             detailed.add(item);

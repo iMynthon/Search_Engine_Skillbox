@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,14 +25,9 @@ import searchengine.dto.CustomResponse.ResponseBoolean;
 import searchengine.dto.CustomResponse.ResponseError;
 import searchengine.until.LemmaFinder;
 import searchengine.until.SiteCrawler;
-
-import javax.sql.DataSource;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -95,7 +89,9 @@ public class IndexingSiteService {
                     Pair<List<Lemma>,List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
                     site.setLemma(lemmaAndIndex.getLeft());
 
-                    site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
+                    site.setStatus(INDEXED);
+
+                    siteRepository.save(site);
                     pageRepository.saveAll(pages);
                     lemmaRepository.saveAll(lemmaAndIndex.getLeft());
                     indexRepository.saveAll(lemmaAndIndex.getRight());
@@ -106,10 +102,10 @@ public class IndexingSiteService {
                 } catch (Exception e) {
                     log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
                     site.setStatus(FAILED);
-                    site.setLastError(pool.isShutdown() ? "" : e.getMessage());
+                    site.setLastError(pool.isShutdown() ? "Индексация остановлена пользователем" : e.getMessage());
                     siteRepository.save(site);
                 }
-                log.info("Сайт про индексирован: {}", siteConfig);
+                log.info("Сайт проиндексирован: {}", siteConfig);
             }
         });
         isIndexingRunning.set(false);
@@ -141,8 +137,9 @@ public class IndexingSiteService {
         SiteConfig siteConfig = checkPageToSiteConfig(urlToPage).orElseThrow(() -> new ResourcesNotFoundException(String.format(
                 "Данная страница %s находится за переделами конфигурационных файлов",urlToPage)));
         if (checkIndexingPage(urlToPage, siteConfig)) {
-            return CompletableFuture.completedFuture(new ResponseError(
-                    new IndexingSitesException(String.format("Данная страница %s уже проиндексирована",urlToPage))));
+            log.info("Такая страница уже есть в базе данных");
+            pageRepository.deletePageByPath(urlToPage.substring(siteConfig.getUrl().length()));
+            log.info("Все связанные данные с этой страницы были удалены");
         }
 
         Site site = siteRepository.findByUrl(siteConfig.getUrl());
@@ -166,6 +163,7 @@ public class IndexingSiteService {
                 pageRepository.saveAll(pages);
                 lemmaRepository.saveAll(lemmaAndIndex.getLeft());
                 indexRepository.saveAll(lemmaAndIndex.getRight());
+                siteRepository.save(site);
 
             } catch (Exception e) {
                 log.error(e.getMessage());
@@ -229,7 +227,7 @@ public class IndexingSiteService {
     }
 
 //    private void batchLemmaInsert(List<Lemma> lemmaList){
-//        String sql = "INSERT INTO \"lemma\" (site_id,lemma,frequency) VALUES (?,?,?)";
+//        String sql = "INSERT INTO lemma (site_id,lemma,frequency) VALUES (?,?,?)";
 //        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
 //            @Override
 //            public void setValues(PreparedStatement ps, int i) throws SQLException {
@@ -247,7 +245,7 @@ public class IndexingSiteService {
 //    }
 //
 //    private void batchIndexInsert(List<Index> indexList){
-//        String sql = "INSERT INTO \"index\" (page_id,lemma_id,rank) VALUES (?,?,?)";
+//        String sql = "INSERT INTO index (page_id,lemma_id,rank) VALUES (?,?,?)";
 //        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
 //            @Override
 //            public void setValues(PreparedStatement ps, int i) throws SQLException {

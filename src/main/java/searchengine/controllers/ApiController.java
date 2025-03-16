@@ -8,8 +8,8 @@ import org.springframework.web.bind.annotation.*;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.model.Site;
 import searchengine.services.IndexingSiteService;
-import searchengine.services.StatisticsService;
 import searchengine.dto.CustomResponse.ResponseBoolean;
+import searchengine.services.StatisticsServiceImpl;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -18,7 +18,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class ApiController {
 
-    private final StatisticsService statisticsService;
+    private final StatisticsServiceImpl statisticsService;
 
     private final IndexingSiteService indexingSiteService;
 

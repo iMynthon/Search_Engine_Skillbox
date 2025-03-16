@@ -47,8 +47,8 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         this.setting = connectionSetting;
     }
 
-    public SiteCrawler(String prefixUrl,String another_url,ConnectionSetting setting){
-        HEAD_URL = startWithPrefixUrl(prefixUrl);
+    public SiteCrawler(String HeadUrl,String another_url,ConnectionSetting setting){
+        HEAD_URL = HeadUrl;
         this.another_url = another_url;
         this.setting = setting;
         this.visitedUrls = ConcurrentHashMap.newKeySet();
