@@ -22,9 +22,10 @@ public class ApiController {
 
     private final IndexingSiteService indexingSiteService;
 
+    @ResponseStatus(HttpStatus.OK)
     @GetMapping("/statistics")
-    public ResponseEntity<StatisticsResponse> statistics() {
-        return ResponseEntity.ok(statisticsService.getStatistics());
+    public StatisticsResponse statistics() {
+        return statisticsService.getStatistics();
     }
 
     @ResponseStatus(HttpStatus.OK)
@@ -39,8 +40,9 @@ public class ApiController {
        return indexingSiteService.stopIndexing();
     }
 
+    @ResponseStatus(HttpStatus.OK)
     @DeleteMapping("/delete/{id}")
-    public ResponseEntity<ResponseBoolean> delete(@PathVariable Integer id){
+    public ResponseBoolean delete(@PathVariable Integer id){
         return indexingSiteService.deleteSiteIndexing(id);
     }
 

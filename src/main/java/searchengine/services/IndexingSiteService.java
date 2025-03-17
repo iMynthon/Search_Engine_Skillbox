@@ -122,12 +122,12 @@ public class IndexingSiteService {
 
     }
 
-    public ResponseEntity<ResponseBoolean> deleteSiteIndexing(Integer id) {
+    public ResponseBoolean deleteSiteIndexing(Integer id) {
         if (!siteRepository.existsById(id)) {
-            return new ResponseEntity<>(new ResponseBoolean(false), HttpStatus.NOT_FOUND);
+            return new ResponseError(new ResourcesNotFoundException("Запрашиваемый сайт не был проиндексирован, ошибка запроса"));
         }
         siteRepository.deleteById(id);
-        return new ResponseEntity<>(new ResponseBoolean(true), HttpStatus.OK);
+        return new ResponseBoolean(true);
     }
 
     @Transactional
