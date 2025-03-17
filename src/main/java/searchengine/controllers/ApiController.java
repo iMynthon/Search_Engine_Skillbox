@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.model.Site;
 import searchengine.services.IndexingSiteService;
-import searchengine.dto.CustomResponse.ResponseBoolean;
+import searchengine.dto.response.ResponseBoolean;
 import searchengine.services.StatisticsServiceImpl;
 
 import java.util.concurrent.CompletableFuture;
