@@ -30,12 +30,11 @@ public class ConnectionSetting {
     private String currentUserAgent;
     private String currentReferrer;
 
-    @Scheduled(fixedRate = 30000)
+    @Scheduled(fixedRate = 15000)
     public void updateSettingConnection(){
         Random random = new Random();
         Setting selectSetting = settings.get(random.nextInt(settings.size() - 1));
         this.currentUserAgent = selectSetting.getUserAgent();
         this.currentReferrer = selectSetting.getReferrer();
-        log.info("Текущие настройки соединения - User Agent: {} - Referrer: {}", currentUserAgent, currentReferrer);
     }
 }

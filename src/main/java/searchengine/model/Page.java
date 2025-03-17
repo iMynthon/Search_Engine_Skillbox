@@ -17,8 +17,7 @@ import java.util.List;
 public class Page {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "page_id_seq")
-    @SequenceGenerator(name = "page_id_seq",sequenceName = "page_id_seq")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)

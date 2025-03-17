@@ -3,14 +3,14 @@ package searchengine.services;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.ConnectionSetting;
 import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
+import searchengine.dto.search.PageRelevance;
+import searchengine.dto.search.ResponseSearch;
 import searchengine.exception.IndexingSitesException;
 import searchengine.exception.ResourcesNotFoundException;
 import searchengine.model.Index;
@@ -47,8 +47,9 @@ public class IndexingSiteService {
     private final SitesList sitesList;
     private final ConnectionSetting connectionSetting;
     private final IndexRepository indexRepository;
-    private final JdbcTemplate jdbcTemplate;
     private ForkJoinPool pool;
+
+    private final JdbcTemplate jdbcTemplate;
 
     private final AtomicBoolean isIndexingRunning = new AtomicBoolean(false);
 
@@ -159,10 +160,11 @@ public class IndexingSiteService {
 
                 site.setLemma(lemmaAndIndex.getLeft());
 
+                siteRepository.save(site);
+
                 pageRepository.saveAll(pages);
                 lemmaRepository.saveAll(lemmaAndIndex.getLeft());
                 indexRepository.saveAll(lemmaAndIndex.getRight());
-                siteRepository.save(site);
 
             } catch (Exception e) {
                 log.error(e.getMessage());
@@ -174,15 +176,91 @@ public class IndexingSiteService {
         return CompletableFuture.completedFuture(new ResponseBoolean(true));
     }
 
-    public ResponseBoolean systemSearch(String text) {
+    public List<ResponseSearch> systemSearch(String text) {
         try {
+
             LemmaFinder lemmaFinder = LemmaFinder.getInstance();
             Set<String> uniqueLemma = lemmaFinder.getLemmaSet(text);
+            List<Lemma> filterLemma = calculatingLemmasOnPages(uniqueLemma);
+
+            List<Page> pages = indexRepository.findPagesByLemma(filterLemma.get(0).getId());
+
+            for (Lemma lemma : filterLemma) {
+                List<Page> pageWithLemma = indexRepository.findPagesByLemma(lemma.getId());
+
+                pages = pages.stream()
+                        .filter(pageWithLemma::contains)
+                        .toList();
+            }
+
+            if (pages.isEmpty()) {
+                    return Collections.EMPTY_LIST;
+                }
+
+            List<PageRelevance> resultRelevance = calculatedRelevance(pages,filterLemma);
+            resultRelevance.sort(Comparator.comparing(PageRelevance::getAbsoluteRelevance).reversed());
+
+            return resultRelevance.stream()
+                    .map(relevance -> {
+                        Site site = pageRepository.findSiteByPage(relevance.getPage().getId());
+                        return new ResponseSearch(site.getUrl(),site.getName(),relevance.getPage().getPath(),
+                                relevance.getPage().getContent(),relevance.getPage().getContent(),relevance.getAbsoluteRelevance());
+                    })
+                    .toList();
+
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        return null;
     }
+
+    public List<PageRelevance> calculatedRelevance(List<Page> pages, List<Lemma> filterLemma){
+
+        List<PageRelevance> resultRelevance = new ArrayList<>();
+
+        double maxAbsoluteRelevance = 0.0;
+
+        for (Page  page : pages){
+
+            double absoluteRelevance = 0.0;
+
+            for(Lemma lemma : filterLemma){
+                Index index = indexRepository.findByPageAndLemma(page,lemma);
+                absoluteRelevance += index.getRank();
+            }
+
+            resultRelevance.add(new PageRelevance(page,absoluteRelevance));
+
+            if(absoluteRelevance > maxAbsoluteRelevance){
+                maxAbsoluteRelevance = absoluteRelevance;
+            }
+
+
+        }
+
+        for(PageRelevance pageRelevance : resultRelevance){
+            double relativeRelevance = pageRelevance.getAbsoluteRelevance() / maxAbsoluteRelevance;
+            pageRelevance.setRelativeRelevance(relativeRelevance);
+        }
+        return resultRelevance;
+    }
+
+    public List<Lemma> calculatingLemmasOnPages(Set<String> lemmas){
+        long totalPages = pageRepository.count();
+        double threshold = 0.5;
+
+        Set<Lemma> filterLemma = new TreeSet<>(Comparator.comparing(Lemma::getFrequency));
+
+        for(String lemma : lemmas){
+            Lemma currentLemma = lemmaRepository.findByLemma(lemma);
+            long countPageToLemma = indexRepository.countPageToLemma(currentLemma.getId());
+            if((double) countPageToLemma / totalPages <= threshold){
+                filterLemma.add(currentLemma);
+            }
+        }
+        return new ArrayList<>(filterLemma);
+    }
+
+
 
     private Optional<SiteConfig> checkPageToSiteConfig(String url) {
         for (SiteConfig siteConfig : sitesList.getSites()) {
@@ -234,42 +312,6 @@ public class IndexingSiteService {
         pages.forEach(p -> p.setSite(site));
         return pages;
     }
-
-//    private void batchLemmaInsert(List<Lemma> lemmaList){
-//        String sql = "INSERT INTO lemma (site_id,lemma,frequency) VALUES (?,?,?)";
-//        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
-//            @Override
-//            public void setValues(PreparedStatement ps, int i) throws SQLException {
-//                Lemma lemma = lemmaList.get(i);
-//                ps.setInt(1,lemma.getSite().getId());
-//                ps.setString(2,lemma.getLemma());
-//                ps.setInt(3,lemma.getFrequency());
-//            }
-//
-//            @Override
-//            public int getBatchSize() {
-//                return lemmaList.size();
-//            }
-//        });
-//    }
-//
-//    private void batchIndexInsert(List<Index> indexList){
-//        String sql = "INSERT INTO index (page_id,lemma_id,rank) VALUES (?,?,?)";
-//        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
-//            @Override
-//            public void setValues(PreparedStatement ps, int i) throws SQLException {
-//                Index index = indexList.get(i);
-//                ps.setObject(1,index.getPage());
-//                ps.setObject(2,index.getLemma());
-//                ps.setFloat(3,index.getRank());
-//            }
-//
-//            @Override
-//            public int getBatchSize() {
-//                return indexList.size();
-//            }
-//        });
-//    }
 
     private Site initSite(SiteConfig siteConfig) {
         Site site = new Site();

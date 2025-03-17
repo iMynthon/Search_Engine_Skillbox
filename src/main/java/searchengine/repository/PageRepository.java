@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.model.Page;
+import searchengine.model.Site;
 
 import java.util.Optional;
 
@@ -15,9 +16,12 @@ public interface PageRepository extends JpaRepository<Page,Integer> {
 
     boolean existsByPath (String path);
 
-    @Query("Select count(*) from Page p where p.site.id = :id")
-    int countPagesToSite(@Param("id") int id);
+    @Query("SELECT count(p) FROM Page p WHERE p.site.id = :id")
+    int countPagesToSite(@Param("id") Integer id);
 
     void deletePageByPath(String path);
+
+    @Query("SELECT s FROM Page p INNER JOIN p.site s WHERE s.id = :id")
+    Site findSiteByPage(@Param("id") Integer id);
 
 }

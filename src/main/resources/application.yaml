@@ -14,15 +14,15 @@ spring:
         batch_size: 50
         order_inserts: true
         order_updates: true
-        generate_statistics: false
+        generate_statistics: true
     show-sql: true
     hibernate:
       ddl-auto: none
 
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
-    enabled: true
-    drop-first: true
+    enabled: false
+    drop-first: false
 
   output:
     ansi:

@@ -9,6 +9,9 @@ import searchengine.model.Lemma;
 @Repository
 public interface LemmaRepository extends JpaRepository<Lemma,Integer> {
 
-    @Query("Select count(*) from Lemma l where l.site.id = :id")
-    int countLemmaToSite(@Param("id") int id);
+    Lemma findByLemma(@Param("lemma") String lemma);
+
+    @Query("SELECT count(l) FROM Lemma l WHERE l.site.id = :id")
+    int countLemmaToSite(@Param("id") Integer id);
+
 }

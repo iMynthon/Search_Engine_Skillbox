@@ -15,8 +15,7 @@ import java.util.List;
 public class Lemma {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "lemma_id_seq")
-    @SequenceGenerator(name = "lemma_id_seq",sequenceName = "lemma_id_seq")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -31,11 +30,4 @@ public class Lemma {
 
     @OneToMany(mappedBy = "lemma",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
     private List<Index> indexList;
-
-
-    public Lemma(Site site, String lemma, Integer frequency) {
-        this.site = site;
-        this.lemma = lemma;
-        this.frequency = frequency;
-    }
 }

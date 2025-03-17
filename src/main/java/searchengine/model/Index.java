@@ -13,8 +13,7 @@ import lombok.Setter;
 public class Index {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE,generator = "index_id_seq")
-    @SequenceGenerator(name = "index_id_seq",sequenceName = "index_id_seq")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
