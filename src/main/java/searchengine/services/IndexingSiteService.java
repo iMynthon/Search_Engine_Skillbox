@@ -25,6 +25,7 @@ import searchengine.dto.response.ResponseBoolean;
 import searchengine.dto.response.ResponseError;
 import searchengine.until.LemmaFinder;
 import searchengine.until.SiteCrawler;
+
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -86,18 +87,15 @@ public class IndexingSiteService {
                     List<Page> pages = new SiteCrawler(siteConfig.getUrl(), connectionSetting).compute();
                     site.setPage(addSiteToPage(site, pages));
 
-                    Pair<List<Lemma>,List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
+                    Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
                     site.setLemma(lemmaAndIndex.getLeft());
 
-                    site.setStatus(INDEXED);
+                    site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
 
                     siteRepository.save(site);
                     pageRepository.saveAll(pages);
                     lemmaRepository.saveAll(lemmaAndIndex.getLeft());
                     indexRepository.saveAll(lemmaAndIndex.getRight());
-                    pageRepository.flush();
-                    lemmaRepository.flush();
-                    indexRepository.flush();
 
                 } catch (Exception e) {
                     log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
@@ -132,10 +130,11 @@ public class IndexingSiteService {
 
     @Transactional
     public CompletableFuture<ResponseBoolean> indexPage(String url) {
-        String urlToPage = URLDecoder.decode(url.substring(url.indexOf("h")),StandardCharsets.UTF_8);
+        String urlToPage = URLDecoder.decode(url.substring(url.indexOf("h")), StandardCharsets.UTF_8);
 
         SiteConfig siteConfig = checkPageToSiteConfig(urlToPage).orElseThrow(() -> new ResourcesNotFoundException(String.format(
-                "Данная страница %s находится за переделами конфигурационных файлов",urlToPage)));
+                "Данная страница %s находится за переделами конфигурационных файлов", urlToPage)));
+
         if (checkIndexingPage(urlToPage, siteConfig)) {
             log.info("Такая страница уже есть в базе данных");
             pageRepository.deletePageByPath(urlToPage.substring(siteConfig.getUrl().length()));
@@ -156,7 +155,7 @@ public class IndexingSiteService {
 
                 site.setPage(addSiteToPage(site, pages));
 
-                Pair<List<Lemma>,List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
+                Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
 
                 site.setLemma(lemmaAndIndex.getLeft());
 
@@ -175,6 +174,16 @@ public class IndexingSiteService {
         return CompletableFuture.completedFuture(new ResponseBoolean(true));
     }
 
+    public ResponseBoolean systemSearch(String text) {
+        try {
+            LemmaFinder lemmaFinder = LemmaFinder.getInstance();
+            Set<String> uniqueLemma = lemmaFinder.getLemmaSet(text);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return null;
+    }
+
     private Optional<SiteConfig> checkPageToSiteConfig(String url) {
         for (SiteConfig siteConfig : sitesList.getSites()) {
             if (url.startsWith(siteConfig.getUrl())) {
@@ -184,7 +193,7 @@ public class IndexingSiteService {
         return Optional.empty();
     }
 
-    private Pair<List<Lemma>,List<Index>> findLemmaToText(Site site, List<Page> pages) {
+    private Pair<List<Lemma>, List<Index>> findLemmaToText(Site site, List<Page> pages) {
         Map<String, Lemma> allLemmas = new ConcurrentHashMap<>();
         List<Index> indexList = new ArrayList<>();
 
@@ -206,14 +215,14 @@ public class IndexingSiteService {
                     Index index = new Index();
                     index.setPage(page);
                     index.setLemma(lemma);
-                    index.setRank((float)count);
+                    index.setRank((float) count);
                     indexList.add(index);
                 });
             } catch (IOException e) {
                 log.error("Ошибка при лемматизации страницы: {}", page.getPath(), e);
             }
         });
-        return Pair.of(new ArrayList<>(allLemmas.values()),indexList);
+        return Pair.of(new ArrayList<>(allLemmas.values()), indexList);
     }
 
     private boolean checkIndexingPage(String url, SiteConfig siteConfig) {

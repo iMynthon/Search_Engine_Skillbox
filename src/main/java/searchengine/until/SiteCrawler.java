@@ -23,7 +23,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
     private static String HEAD_URL;
 
-    private String another_url;
+    private final String another_url;
 
     private final Set<String> visitedUrls;
 
@@ -47,7 +47,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         this.setting = connectionSetting;
     }
 
-    public SiteCrawler(String HeadUrl,String another_url,ConnectionSetting setting){
+    public SiteCrawler(String HeadUrl, String another_url, ConnectionSetting setting) {
         HEAD_URL = HeadUrl;
         this.another_url = another_url;
         this.setting = setting;
@@ -72,8 +72,8 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
         try {
             Connection.Response response = Jsoup.connect(another_url)
-                    .userAgent(getRandomSetting().getUserAgent())
-                    .referrer(getRandomSetting().getReferrer())
+                    .userAgent(setting.getCurrentUserAgent())
+                    .referrer(setting.getCurrentReferrer())
                     .timeout(5000)
                     .execute();
 
@@ -87,7 +87,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
             for (Element element : elements) {
 
-                if(Thread.interrupted()){
+                if (Thread.interrupted()) {
                     Thread.currentThread().interrupt();
                     return pages;
                 }
@@ -102,7 +102,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             }
 
             for (SiteCrawler siteCrawler : crawler) {
-                if(Thread.interrupted()){
+                if (Thread.interrupted()) {
                     Thread.currentThread().interrupt();
                     return pages;
                 }
@@ -115,7 +115,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             currentPage.setCode(500);
             currentPage.setContent(e.getMessage().isEmpty() ? "Индексация остановлена пользователей" : e.getMessage());
             pages.add(currentPage);
-            if(Thread.interrupted()){
+            if (Thread.interrupted()) {
                 Thread.currentThread().interrupt();
             }
         }
@@ -123,7 +123,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
     }
 
     public boolean isValidLink(String urls) {
-        if(Thread.interrupted()){
+        if (Thread.interrupted()) {
             Thread.currentThread().interrupt();
             return false;
         }
@@ -132,12 +132,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
     }
 
-    public String startWithPrefixUrl(String url){
-        return HEAD_URL.substring(0,url.length());
-    }
-
-    public ConnectionSetting.Setting getRandomSetting(){
-        List<ConnectionSetting.Setting> settings = setting.getSettings();
-        return settings.get(random.nextInt(settings.size()));
+    public String startWithPrefixUrl(String url) {
+        return HEAD_URL.substring(0, url.length());
     }
 }
