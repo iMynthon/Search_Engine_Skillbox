@@ -21,8 +21,8 @@ spring:
 
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
-    enabled: false
-    drop-first: false
+    enabled: true
+    drop-first: true
 
   output:
     ansi:
@@ -34,6 +34,8 @@ indexing-settings:
       name: Svetlovka.ru
     - url: http://www.playback.ru/
       name: PlayBack.Ru
+    - url: https://practicum.yandex.ru/
+      name: Yandex.Practicum
 
 connection-settings:
   settings:

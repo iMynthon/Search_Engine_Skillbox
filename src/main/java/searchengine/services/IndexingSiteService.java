@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.ConnectionSetting;
@@ -26,6 +28,8 @@ import searchengine.until.SiteCrawler;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -47,7 +51,9 @@ public class IndexingSiteService {
     private final ConnectionSetting connectionSetting;
     private final IndexRepository indexRepository;
     private ForkJoinPool pool;
+    private final JdbcTemplate jdbcTemplate;
     private final AtomicBoolean isIndexingRunning = new AtomicBoolean(false);
+
 
     @Transactional
     public CompletableFuture<ResponseBoolean> startIndexingSite() {
@@ -92,7 +98,7 @@ public class IndexingSiteService {
                     siteRepository.save(site);
                     pageRepository.saveAll(pages);
                     lemmaRepository.saveAll(lemmaAndIndex.getLeft());
-                    indexRepository.saveAll(lemmaAndIndex.getRight());
+                    batchIndexInsert(lemmaAndIndex.getRight());
 
                 } catch (Exception e) {
                     log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
@@ -390,6 +396,23 @@ public class IndexingSiteService {
         site.setLastError("");
         site.setStatus(INDEXING);
         return site;
+    }
+
+    private void batchIndexInsert(List<Index> indexList) {
+        String sql = "INSERT INTO index (page_id,lemma_id,rank) VALUES (?,?,?)";
+        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement ps, int i) throws SQLException {
+                Index index = indexList.get(i);
+                ps.setObject(1, index.getPage().getId());
+                ps.setObject(2, index.getLemma().getId());
+                ps.setFloat(3, index.getRank());
+            }
+            @Override
+            public int getBatchSize() {
+                return indexList.size();
+            }
+        });
     }
 
 }
