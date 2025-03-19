@@ -42,10 +42,6 @@ databaseChangeLog:
       id: 2
       author: Mynthon
       changes:
-#        - createSequence:
-#            sequenceName: page_id_seq
-#            startValue: 1
-#            incrementBy: 50
         - createTable:
             tableName: page
             columns:
@@ -55,7 +51,6 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
-#                    defaultSequenceNext: page_id_seq
               - column:
                   name: site_id
                   type: int
@@ -94,10 +89,6 @@ databaseChangeLog:
       id: 4
       author: Mynthon
       changes:
-#        - createSequence:
-#            sequenceName: lemma_id_seq
-#            startValue: 1
-#            incrementBy: 50
         - createTable:
             tableName: lemma
             columns:
@@ -130,10 +121,6 @@ databaseChangeLog:
       id: 5
       author: Mynthon
       changes:
-#        - createSequence:
-#            sequenceName: index_id_seq
-#            startValue: 1
-#            incrementBy: 50
         - createTable:
             tableName: index
             columns:
@@ -143,7 +130,6 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
-#                    defaultSequenceNext: index_id_seq
               - column:
                   name: page_id
                   type: int

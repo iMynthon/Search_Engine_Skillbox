@@ -28,6 +28,6 @@ public class Lemma {
     @Column(name = "frequency")
     private Integer frequency;
 
-    @OneToMany(mappedBy = "lemma",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "lemma",cascade = CascadeType.REMOVE,fetch = FetchType.LAZY)
     private List<Index> indexList;
 }

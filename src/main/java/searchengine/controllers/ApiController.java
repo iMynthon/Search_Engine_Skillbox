@@ -4,8 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import searchengine.dto.response.ResponseSearch;
 import searchengine.dto.statistics.StatisticsResponse;
-import searchengine.model.Site;
 import searchengine.services.IndexingSiteService;
 import searchengine.dto.response.ResponseBoolean;
 import searchengine.services.StatisticsServiceImpl;
@@ -20,6 +20,13 @@ public class ApiController {
     private final StatisticsServiceImpl statisticsService;
 
     private final IndexingSiteService indexingSiteService;
+
+    @GetMapping("/search")
+    public ResponseBoolean search(@RequestParam String query,
+                                 @RequestParam(required = false) String site) {
+
+        return indexingSiteService.systemSearch(query,site);
+    }
 
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/statistics")
@@ -49,10 +56,5 @@ public class ApiController {
     @PostMapping("/indexPage")
     public CompletableFuture<ResponseBoolean> IndexPage(@RequestBody @NotBlank String url){
         return indexingSiteService.indexPage(url);
-    }
-
-    @GetMapping
-    public Site site(@RequestParam Site site){
-        return site;
     }
 }

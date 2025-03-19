@@ -1,10 +1,7 @@
 package searchengine.model;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 
 import java.util.List;
 
@@ -13,7 +10,6 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString
 public class Page {
 
     @Id
@@ -33,7 +29,7 @@ public class Page {
     @Column(name = "content")
     private String content;
 
-    @OneToMany(mappedBy = "page",cascade = CascadeType.ALL,fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "page",cascade = CascadeType.REMOVE,fetch = FetchType.LAZY)
     private List<Index> indexList;
 
     public Page(String path) {

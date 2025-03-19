@@ -14,7 +14,7 @@ spring:
         batch_size: 50
         order_inserts: true
         order_updates: true
-        generate_statistics: true
+        generate_statistics: false
     show-sql: true
     hibernate:
       ddl-auto: none

@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public class ResponseError extends ResponseBoolean{
+public class ResponseError extends ResponseBoolean {
 
    private final Exception exception;
 

@@ -1,16 +1,20 @@
 package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.ConnectionSetting;
 import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
-import searchengine.dto.search.PageRelevance;
-import searchengine.dto.search.ResponseSearch;
+import searchengine.dto.response.PageRelevance;
+import searchengine.dto.response.ResponseSearch;
+import searchengine.dto.response.ResultSearchRequest;
 import searchengine.exception.IndexingSitesException;
 import searchengine.exception.ResourcesNotFoundException;
 import searchengine.model.Index;
@@ -176,14 +180,21 @@ public class IndexingSiteService {
         return CompletableFuture.completedFuture(new ResponseBoolean(true));
     }
 
-    public List<ResponseSearch> systemSearch(String text) {
+    public ResponseBoolean systemSearch(String query, String siteUrl) {
+        if (query.isBlank()) {
+            return new ResponseError(new ResourcesNotFoundException("Задай пустой поисковой запрос"));
+        }
         try {
-
+            Site site = siteRepository.findByUrl(siteUrl);
             LemmaFinder lemmaFinder = LemmaFinder.getInstance();
-            Set<String> uniqueLemma = lemmaFinder.getLemmaSet(text);
-            List<Lemma> filterLemma = calculatingLemmasOnPages(uniqueLemma);
+            Set<String> uniqueLemma = lemmaFinder.getLemmaSet(query);
+            List<Lemma> filterLemma = calculatingLemmasOnPages(uniqueLemma, site);
 
             List<Page> pages = indexRepository.findPagesByLemma(filterLemma.get(0).getId());
+
+            if (pages.isEmpty()) {
+                return new ResponseSearch(false, 0, Collections.EMPTY_LIST);
+            }
 
             for (Lemma lemma : filterLemma) {
                 List<Page> pageWithLemma = indexRepository.findPagesByLemma(lemma.getId());
@@ -193,73 +204,108 @@ public class IndexingSiteService {
                         .toList();
             }
 
-            if (pages.isEmpty()) {
-                    return Collections.EMPTY_LIST;
-                }
-
-            List<PageRelevance> resultRelevance = calculatedRelevance(pages,filterLemma);
+            List<PageRelevance> resultRelevance = calculatedRelevance(filterLemma);
             resultRelevance.sort(Comparator.comparing(PageRelevance::getAbsoluteRelevance).reversed());
+            List<ResultSearchRequest> resultSearchRequestList = createdRequest(resultRelevance, site, query);
 
-            return resultRelevance.stream()
-                    .map(relevance -> {
-                        Site site = pageRepository.findSiteByPage(relevance.getPage().getId());
-                        return new ResponseSearch(site.getUrl(),site.getName(),relevance.getPage().getPath(),
-                                relevance.getPage().getContent(),relevance.getPage().getContent(),relevance.getAbsoluteRelevance());
-                    })
-                    .toList();
+            return new ResponseSearch(true, resultSearchRequestList.size(), resultSearchRequestList);
 
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public List<PageRelevance> calculatedRelevance(List<Page> pages, List<Lemma> filterLemma){
+    public List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, Site site, String query) {
+        return pageRelevance.stream()
+                .map(page -> {
+
+                    String url = site.getUrl();
+                    String nameUrl = site.getName();
+                    String uri = page.getPage().getPath();
+
+                    Document document = Jsoup.parse(page.getPage().getContent());
+                    String title = document.title();
+
+                    String snippet = generatedSnippet(query, page.getPage().getContent());
+
+                    return new ResultSearchRequest(url, nameUrl, uri, title, snippet, page.getRelativeRelevance());
+
+                }).toList();
+    }
+
+
+    public String generatedSnippet(String query, String content) {
+
+        String text = Jsoup.parse(content).text();
+
+        int index = text.toLowerCase().indexOf(query.toLowerCase());
+
+        if (index == -1) {
+
+            return text.substring(0, Math.min(text.length(), 150));
+        }
+
+        int start = Math.max(0, index - 50);
+        int end = Math.min(text.length(), index + query.length() + 50);
+
+        String snippet = text.substring(start, end);
+
+
+        snippet = snippet.replaceAll("(?i)(" + query + ")", "<b>$1</b>");
+
+        return snippet;
+    }
+
+    public List<PageRelevance> calculatedRelevance(List<Lemma> filterLemma) {
 
         List<PageRelevance> resultRelevance = new ArrayList<>();
 
-        double maxAbsoluteRelevance = 0.0;
+        List<Integer> lemmaIds = filterLemma.stream().mapToInt(Lemma::getId).boxed().toList();
 
-        for (Page  page : pages){
+        List<Index> indexList = indexRepository.findByLemmaIdIn(lemmaIds);
 
-            double absoluteRelevance = 0.0;
+        Map<Page, Double> pageToRelevance = new HashMap<>();
 
-            for(Lemma lemma : filterLemma){
-                Index index = indexRepository.findByPageAndLemma(page,lemma);
-                absoluteRelevance += index.getRank();
-            }
+        for (Index index : indexList) {
+            Page page = index.getPage();
+            double rank = index.getRank();
 
-            resultRelevance.add(new PageRelevance(page,absoluteRelevance));
-
-            if(absoluteRelevance > maxAbsoluteRelevance){
-                maxAbsoluteRelevance = absoluteRelevance;
-            }
-
-
+            pageToRelevance.put(page, pageToRelevance.getOrDefault(page, 0.0) + rank);
         }
 
-        for(PageRelevance pageRelevance : resultRelevance){
-            double relativeRelevance = pageRelevance.getAbsoluteRelevance() / maxAbsoluteRelevance;
-            pageRelevance.setRelativeRelevance(relativeRelevance);
+        double maxAbsoluteRelevance = pageToRelevance.values().stream()
+                .mapToDouble(Double::doubleValue)
+                .max()
+                .orElse(0.1);
+
+        for (Map.Entry<Page, Double> entry : pageToRelevance.entrySet()) {
+            Page page = entry.getKey();
+            double absoluteRelevance = entry.getValue();
+            double relativeRelevance = absoluteRelevance / maxAbsoluteRelevance;
+
+            resultRelevance.add(new PageRelevance(page, absoluteRelevance, relativeRelevance));
         }
+
         return resultRelevance;
     }
 
-    public List<Lemma> calculatingLemmasOnPages(Set<String> lemmas){
+    public List<Lemma> calculatingLemmasOnPages(Set<String> lemmas, Site site) {
         long totalPages = pageRepository.count();
-        double threshold = 0.5;
+        double threshold = 0.6;
 
         Set<Lemma> filterLemma = new TreeSet<>(Comparator.comparing(Lemma::getFrequency));
 
-        for(String lemma : lemmas){
-            Lemma currentLemma = lemmaRepository.findByLemma(lemma);
-            long countPageToLemma = indexRepository.countPageToLemma(currentLemma.getId());
-            if((double) countPageToLemma / totalPages <= threshold){
-                filterLemma.add(currentLemma);
+        for (String lemma : lemmas) {
+            Lemma currentLemma = lemmaRepository.findByLemmaToSiteId(lemma, site);
+            if(currentLemma != null) {
+                long countPageToLemma = indexRepository.countPageToLemma(currentLemma.getId());
+                if ((double) countPageToLemma / totalPages <= threshold) {
+                    filterLemma.add(currentLemma);
+                }
             }
         }
         return new ArrayList<>(filterLemma);
     }
-
 
 
     private Optional<SiteConfig> checkPageToSiteConfig(String url) {
