@@ -53,7 +53,6 @@ public class LemmaFinder {
         return lemmas;
     }
 
-
     public Set<String> getLemmaSet(String text) {
         String[] textArray = arrayContainsRussianWords(text);
         Set<String> lemmaSet = new HashSet<>();
@@ -67,6 +66,41 @@ public class LemmaFinder {
             }
         }
         return lemmaSet;
+    }
+
+    public List<String> getWordForms(String word) {
+
+        List<String> wordForms = new ArrayList<>();
+
+        if (word == null || word.isBlank()) {
+            return wordForms;
+        }
+
+        String[] words = word.split("\\s+");
+
+        for (String singleWord : words) {
+
+            String cleanWord = singleWord.toLowerCase().replaceAll("[^а-яё]", "");
+
+            if (cleanWord.isBlank()) {
+                continue;
+            }
+
+            List<String> morphInfo = luceneMorphology.getMorphInfo(cleanWord);
+            for (String info : morphInfo) {
+                String[] parts = info.split("\\|");
+                if (parts.length > 1) {
+                    wordForms.add(parts[0]);
+                }
+            }
+
+            List<String> normalForms = luceneMorphology.getNormalForms(cleanWord);
+            if (!normalForms.isEmpty()) {
+                wordForms.addAll(normalForms);
+            }
+        }
+
+        return wordForms;
     }
 
     private boolean anyWordBaseBelongToParticle(List<String> wordBaseForms) {

@@ -11,7 +11,6 @@ import searchengine.model.Page;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -28,8 +27,6 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
     private final Set<String> visitedUrls;
 
     private final ConnectionSetting setting;
-
-    private final Random random = new Random();
 
     private static final Pattern FILE_PATTERN = Pattern
             .compile(".*\\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz|7z|mp3|wav|mp4|mkv|avi|mov|sql)$", Pattern.CASE_INSENSITIVE);
@@ -130,9 +127,5 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         return urls.startsWith(HEAD_URL) && !urls.contains("#") && !visitedUrls.contains(urls)
                 && !FILE_PATTERN.matcher(urls).matches();
 
-    }
-
-    public String startWithPrefixUrl(String url) {
-        return HEAD_URL.substring(0, url.length());
     }
 }

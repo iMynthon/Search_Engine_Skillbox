@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import searchengine.dto.response.ResponseSearch;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.services.IndexingSiteService;
 import searchengine.dto.response.ResponseBoolean;
@@ -23,9 +22,11 @@ public class ApiController {
 
     @GetMapping("/search")
     public ResponseBoolean search(@RequestParam String query,
-                                 @RequestParam(required = false) String site) {
+                                 @RequestParam(required = false) String site,
+                                  @RequestParam(required = false, defaultValue = "0") Integer offset,
+                                  @RequestParam(required = false,defaultValue = "20")Integer limit){
 
-        return indexingSiteService.systemSearch(query,site);
+        return indexingSiteService.systemSearch(query,site,offset,limit);
     }
 
     @ResponseStatus(HttpStatus.OK)

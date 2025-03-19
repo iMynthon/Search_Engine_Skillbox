@@ -1,20 +1,16 @@
 package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.ConnectionSetting;
 import searchengine.config.SiteConfig;
 import searchengine.config.SitesList;
-import searchengine.dto.response.PageRelevance;
-import searchengine.dto.response.ResponseSearch;
-import searchengine.dto.response.ResultSearchRequest;
+import searchengine.dto.response.*;
 import searchengine.exception.IndexingSitesException;
 import searchengine.exception.ResourcesNotFoundException;
 import searchengine.model.Index;
@@ -25,11 +21,8 @@ import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
-import searchengine.dto.response.ResponseBoolean;
-import searchengine.dto.response.ResponseError;
 import searchengine.until.LemmaFinder;
 import searchengine.until.SiteCrawler;
-
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +30,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static searchengine.model.Status.*;
 
@@ -52,9 +47,6 @@ public class IndexingSiteService {
     private final ConnectionSetting connectionSetting;
     private final IndexRepository indexRepository;
     private ForkJoinPool pool;
-
-    private final JdbcTemplate jdbcTemplate;
-
     private final AtomicBoolean isIndexingRunning = new AtomicBoolean(false);
 
     @Transactional
@@ -125,9 +117,11 @@ public class IndexingSiteService {
 
     }
 
+    @Transactional
     public ResponseBoolean deleteSiteIndexing(Integer id) {
         if (!siteRepository.existsById(id)) {
-            return new ResponseError(new ResourcesNotFoundException("Запрашиваемый сайт не был проиндексирован, ошибка запроса"));
+            return new ResponseError(new ResourcesNotFoundException("По вашему запросу ничего не найдено, " +
+                    "данный сайт не был проиндексирован"));
         }
         siteRepository.deleteById(id);
         return new ResponseBoolean(true);
@@ -180,9 +174,9 @@ public class IndexingSiteService {
         return CompletableFuture.completedFuture(new ResponseBoolean(true));
     }
 
-    public ResponseBoolean systemSearch(String query, String siteUrl) {
+    public ResponseBoolean systemSearch(String query, String siteUrl, Integer offset, Integer limit) {
         if (query.isBlank()) {
-            return new ResponseError(new ResourcesNotFoundException("Задай пустой поисковой запрос"));
+            return new ResponseEmptySearchQuery(false, "Пустой поисковый запрос");
         }
         try {
             Site site = siteRepository.findByUrl(siteUrl);
@@ -190,37 +184,39 @@ public class IndexingSiteService {
             Set<String> uniqueLemma = lemmaFinder.getLemmaSet(query);
             List<Lemma> filterLemma = calculatingLemmasOnPages(uniqueLemma, site);
 
-            List<Page> pages = indexRepository.findPagesByLemma(filterLemma.get(0).getId());
-
-            if (pages.isEmpty()) {
-                return new ResponseSearch(false, 0, Collections.EMPTY_LIST);
-            }
+            List<Page> pages = indexRepository.findPagesByLemma(filterLemma.get(0).getId()).orElseThrow(
+                    () -> new ResourcesNotFoundException("Страниц с вашим поисковым запросом не найдено"));
 
             for (Lemma lemma : filterLemma) {
-                List<Page> pageWithLemma = indexRepository.findPagesByLemma(lemma.getId());
+                Optional<List<Page>> pageWithLemma = indexRepository.findPagesByLemma(lemma.getId());
 
                 pages = pages.stream()
-                        .filter(pageWithLemma::contains)
+                        .filter(pageWithLemma.get()::contains)
                         .toList();
             }
 
             List<PageRelevance> resultRelevance = calculatedRelevance(filterLemma);
             resultRelevance.sort(Comparator.comparing(PageRelevance::getAbsoluteRelevance).reversed());
-            List<ResultSearchRequest> resultSearchRequestList = createdRequest(resultRelevance, site, query);
 
-            return new ResponseSearch(true, resultSearchRequestList.size(), resultSearchRequestList);
+            List<ResultSearchRequest> resultSearchRequestList = createdRequest(resultRelevance, query);
+
+            int totalResultSearchCount = resultSearchRequestList.size();
+            List<ResultSearchRequest> paginationResult = resultSearchRequestList.stream()
+                    .skip(offset)
+                    .limit(limit)
+                    .toList();
+            return new ResponseSearch(true, totalResultSearchCount, paginationResult);
 
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, Site site, String query) {
+    public List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, String query) {
         return pageRelevance.stream()
                 .map(page -> {
-
-                    String url = site.getUrl();
-                    String nameUrl = site.getName();
+                    String url = page.getPage().getSite().getUrl();
+                    String nameUrl = page.getPage().getSite().getName();
                     String uri = page.getPage().getPath();
 
                     Document document = Jsoup.parse(page.getPage().getContent());
@@ -229,7 +225,6 @@ public class IndexingSiteService {
                     String snippet = generatedSnippet(query, page.getPage().getContent());
 
                     return new ResultSearchRequest(url, nameUrl, uri, title, snippet, page.getRelativeRelevance());
-
                 }).toList();
     }
 
@@ -238,29 +233,54 @@ public class IndexingSiteService {
 
         String text = Jsoup.parse(content).text();
 
-        int index = text.toLowerCase().indexOf(query.toLowerCase());
+        String[] words = query.split("\\s+");
+
+        int index = findFirstOccurrenceIndex(text, words);
 
         if (index == -1) {
-
-            return text.substring(0, Math.min(text.length(), 150));
+            return text.length() > 100 ? text.substring(0, 100) + " " : text;
         }
 
+        int snippetLength = query.length() + 100;
         int start = Math.max(0, index - 50);
-        int end = Math.min(text.length(), index + query.length() + 50);
+        int end = Math.min(text.length(), start + snippetLength);
 
-        String snippet = text.substring(start, end);
-
-
-        snippet = snippet.replaceAll("(?i)(" + query + ")", "<b>$1</b>");
-
-        return snippet;
+        return highlightWords(text.substring(start, end), words);
     }
+
+    private int findFirstOccurrenceIndex(String text, String[] words) {
+
+        String regex = String.join("|", words);
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(text);
+
+        return matcher.find() ? matcher.start() : -1;
+    }
+
+    private String highlightWords(String text, String[] words) {
+
+        String regex = "(" + String.join("|", words) + ")";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(text);
+
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            matcher.appendReplacement(result, "<b>" + matcher.group() + "</b>");
+        }
+        matcher.appendTail(result);
+
+        return result.toString();
+    }
+
 
     public List<PageRelevance> calculatedRelevance(List<Lemma> filterLemma) {
 
         List<PageRelevance> resultRelevance = new ArrayList<>();
 
-        List<Integer> lemmaIds = filterLemma.stream().mapToInt(Lemma::getId).boxed().toList();
+        List<Integer> lemmaIds = filterLemma.stream()
+                .mapToInt(Lemma::getId)
+                .boxed()
+                .toList();
 
         List<Index> indexList = indexRepository.findByLemmaIdIn(lemmaIds);
 
@@ -295,12 +315,15 @@ public class IndexingSiteService {
 
         Set<Lemma> filterLemma = new TreeSet<>(Comparator.comparing(Lemma::getFrequency));
 
-        for (String lemma : lemmas) {
-            Lemma currentLemma = lemmaRepository.findByLemmaToSiteId(lemma, site);
-            if(currentLemma != null) {
-                long countPageToLemma = indexRepository.countPageToLemma(currentLemma.getId());
-                if ((double) countPageToLemma / totalPages <= threshold) {
-                    filterLemma.add(currentLemma);
+        for (String lemma1 : lemmas) {
+            List<Lemma> lemmaList = site == null ? lemmaRepository.findByLemma(lemma1)
+                    : Collections.singletonList(lemmaRepository.findByLemmaToSiteId(lemma1, site));
+            for (Lemma currentLemma : lemmaList) {
+                if (currentLemma != null) {
+                    long countPageToLemma = indexRepository.countPageToLemma(currentLemma.getId());
+                    if ((double) countPageToLemma / totalPages <= threshold) {
+                        filterLemma.add(currentLemma);
+                    }
                 }
             }
         }
