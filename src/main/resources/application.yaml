@@ -7,6 +7,11 @@ spring:
     username: Warg
     password: engine
 
+
+  mvc:
+    favicon:
+        enabled: false
+
   jpa:
     properties:
       hibernate:
@@ -34,8 +39,8 @@ indexing-settings:
       name: Svetlovka.ru
     - url: http://www.playback.ru/
       name: PlayBack.Ru
-    - url: https://practicum.yandex.ru/
-      name: Yandex.Practicum
+    - url: https://skillbox.ru/
+      name: Skillbox.ru
 
 connection-settings:
   settings:

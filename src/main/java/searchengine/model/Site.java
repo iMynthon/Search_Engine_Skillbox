@@ -5,10 +5,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcType;
-import org.hibernate.dialect.PostgreSQLEnumJdbcType;
-
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,7 +19,7 @@ public class Site {
     private Integer id;
 
     @Column(name = "status")
-    @JdbcType(PostgreSQLEnumJdbcType.class)
+    @Enumerated(EnumType.STRING)
     private Status status;
 
     @CreationTimestamp
@@ -39,10 +35,10 @@ public class Site {
     @Column(name = "name")
     private String name;
 
-    @OneToMany(mappedBy = "site",cascade = CascadeType.REMOVE, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "site",cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Page> page;
 
-    @OneToMany(mappedBy = "site", cascade = CascadeType.REMOVE, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "site", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Lemma> lemma;
 
 }

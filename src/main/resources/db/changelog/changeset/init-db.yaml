@@ -14,7 +14,7 @@ databaseChangeLog:
                     nullable: false
               - column:
                   name: status
-                  type: indexing_status
+                  type: text
                   constraints:
                     nullable: false
               - column:
@@ -35,8 +35,6 @@ databaseChangeLog:
                   type: varchar(255)
                   constraints:
                     nullable: false
-              - sql:
-                  sql: CREATE TYPE indexing_status AS ENUM ('INDEXING', 'INDEXED', 'FAILED');
 
   - changeSet:
       id: 2

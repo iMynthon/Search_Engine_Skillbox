@@ -54,8 +54,6 @@ public class IndexingSiteService {
     private final JdbcTemplate jdbcTemplate;
     private final AtomicBoolean isIndexingRunning = new AtomicBoolean(false);
 
-
-    @Transactional
     public CompletableFuture<ResponseBoolean> startIndexingSite() {
         if (isIndexingRunning.get()) {
             log.info("Индексация уже запущена");
@@ -93,8 +91,7 @@ public class IndexingSiteService {
                     Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
                     site.setLemma(lemmaAndIndex.getLeft());
 
-                    site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
-
+                    site.setStatus(INDEXED);
                     siteRepository.save(site);
                     pageRepository.saveAll(pages);
                     lemmaRepository.saveAll(lemmaAndIndex.getLeft());
