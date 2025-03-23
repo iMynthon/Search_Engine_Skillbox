@@ -315,7 +315,7 @@ public class IndexingSiteService {
 
     private List<Lemma> calculatingLemmasOnPages(Set<String> lemmas, Site site) {
         long totalPages = pageRepository.count();
-        double threshold = 0.4;
+        double threshold = 0.8;
 
         Set<Lemma> filterLemma = new TreeSet<>(Comparator.comparing(Lemma::getFrequency));
 
@@ -325,7 +325,7 @@ public class IndexingSiteService {
             for (Lemma currentLemma : lemmaList) {
                 if (currentLemma != null) {
                     long countPageToLemma = indexRepository.countPageToLemma(currentLemma.getId());
-                    if ((double) countPageToLemma / totalPages <= threshold || lemmaList.size() == 1) {
+                    if ((double) countPageToLemma / totalPages <= threshold || lemmaList.size() < 4) {
                         filterLemma.add(currentLemma);
                     }
                 }
