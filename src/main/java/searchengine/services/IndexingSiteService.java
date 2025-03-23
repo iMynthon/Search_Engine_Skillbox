@@ -3,6 +3,7 @@ package searchengine.services;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
+import org.hibernate.Hibernate;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
@@ -25,6 +26,7 @@ import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.until.LemmaFinder;
 import searchengine.until.SiteCrawler;
+
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -165,7 +167,7 @@ public class IndexingSiteService {
 
                 pageRepository.saveAll(pages);
                 lemmaRepository.saveAll(lemmaAndIndex.getLeft());
-                indexRepository.saveAll(lemmaAndIndex.getRight());
+                batchIndexInsert(lemmaAndIndex.getRight());
 
             } catch (Exception e) {
                 log.error(e.getMessage());
@@ -215,7 +217,7 @@ public class IndexingSiteService {
         }
     }
 
-    public List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, String query) {
+    private List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, String query) {
         return pageRelevance.stream()
                 .map(page -> {
                     String url = page.getPage().getSite().getUrl();
@@ -232,7 +234,7 @@ public class IndexingSiteService {
     }
 
 
-    public String generatedSnippet(String query, String content) {
+    private String generatedSnippet(String query, String content) {
 
         String text = Jsoup.parse(content).text();
 
@@ -275,8 +277,7 @@ public class IndexingSiteService {
         return result.toString();
     }
 
-
-    public List<PageRelevance> calculatedRelevance(List<Lemma> filterLemma) {
+    private List<PageRelevance> calculatedRelevance(List<Lemma> filterLemma) {
 
         List<PageRelevance> resultRelevance = new ArrayList<>();
 
@@ -312,7 +313,7 @@ public class IndexingSiteService {
         return resultRelevance;
     }
 
-    public List<Lemma> calculatingLemmasOnPages(Set<String> lemmas, Site site) {
+    private List<Lemma> calculatingLemmasOnPages(Set<String> lemmas, Site site) {
         long totalPages = pageRepository.count();
         double threshold = 0.4;
 
@@ -401,10 +402,13 @@ public class IndexingSiteService {
             @Override
             public void setValues(PreparedStatement ps, int i) throws SQLException {
                 Index index = indexList.get(i);
+                Hibernate.initialize(index.getPage());
+                Hibernate.initialize(index.getLemma());
                 ps.setObject(1, index.getPage().getId());
                 ps.setObject(2, index.getLemma().getId());
                 ps.setFloat(3, index.getRank());
             }
+
             @Override
             public int getBatchSize() {
                 return indexList.size();
