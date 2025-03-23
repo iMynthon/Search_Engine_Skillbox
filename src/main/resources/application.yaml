@@ -7,11 +7,6 @@ spring:
     username: Warg
     password: engine
 
-
-  mvc:
-    favicon:
-        enabled: false
-
   jpa:
     properties:
       hibernate:
@@ -35,12 +30,12 @@ spring:
 
 indexing-settings:
   sites:
+    - url: https://ruweb.net/
+      name: RuWeb.ru
     - url: https://www.svetlovka.ru/
       name: Svetlovka.ru
     - url: http://www.playback.ru/
-      name: PlayBack.Ru
-    - url: https://skillbox.ru/
-      name: Skillbox.ru
+      name: PlayBack.ru
 
 connection-settings:
   settings:
