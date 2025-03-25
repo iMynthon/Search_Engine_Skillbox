@@ -11,7 +11,7 @@ public record ResultSearchRequest(
 
         String snippet,
 
-        double relevance
+        Double relevance
 ) {
 
 }

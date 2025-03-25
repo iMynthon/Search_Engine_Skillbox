@@ -1,18 +1,14 @@
 package searchengine.dto.response;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
 import searchengine.model.Page;
 
-@Getter @Setter
-@AllArgsConstructor
-public class PageRelevance {
+public record PageRelevance(
 
-    private Page page;
+        Page page,
 
-    private double absoluteRelevance;
+        Double absoluteRelevance,
 
-    private double relativeRelevance;
+        Double relativeRelevance
+) {
 
 }

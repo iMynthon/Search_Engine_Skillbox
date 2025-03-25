@@ -15,14 +15,14 @@ spring:
         order_inserts: true
         order_updates: true
         generate_statistics: false
-    show-sql: true
+    show-sql: false
     hibernate:
       ddl-auto: none
 
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
-    enabled: true
-    drop-first: true
+    enabled: false
+    drop-first: false
 
   output:
     ansi:

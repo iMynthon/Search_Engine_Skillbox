@@ -1,11 +1,10 @@
 package searchengine.exception;
 
-import lombok.AllArgsConstructor;
+public record AppError(
 
-@AllArgsConstructor
-public class AppError {
+        Boolean result,
 
-    Boolean result;
+        String error
+) {
 
-    String error;
 }

@@ -26,6 +26,7 @@ import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.until.LemmaFinder;
 import searchengine.until.SiteCrawler;
+import searchengine.until.SnippetGenerator;
 
 import java.io.IOException;
 import java.net.URLDecoder;
@@ -93,11 +94,7 @@ public class IndexingSiteService {
                     Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
                     site.setLemma(lemmaAndIndex.getLeft());
 
-                    site.setStatus(INDEXED);
-                    siteRepository.save(site);
-                    pageRepository.saveAll(pages);
-                    lemmaRepository.saveAll(lemmaAndIndex.getLeft());
-                    batchIndexInsert(lemmaAndIndex.getRight());
+                    allInsert(site,pages,lemmaAndIndex.getLeft(),lemmaAndIndex.getRight());
 
                 } catch (Exception e) {
                     log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
@@ -163,11 +160,7 @@ public class IndexingSiteService {
 
                 site.setLemma(lemmaAndIndex.getLeft());
 
-                siteRepository.save(site);
-
-                pageRepository.saveAll(pages);
-                lemmaRepository.saveAll(lemmaAndIndex.getLeft());
-                batchIndexInsert(lemmaAndIndex.getRight());
+                allInsert(site,pages,lemmaAndIndex.getLeft(),lemmaAndIndex.getRight());
 
             } catch (Exception e) {
                 log.error(e.getMessage());
@@ -201,7 +194,7 @@ public class IndexingSiteService {
             }
 
             List<PageRelevance> resultRelevance = calculatedRelevance(filterLemma);
-            resultRelevance.sort(Comparator.comparing(PageRelevance::getAbsoluteRelevance).reversed());
+            resultRelevance.sort(Comparator.comparing(PageRelevance::absoluteRelevance).reversed());
 
             List<ResultSearchRequest> resultSearchRequestList = createdRequest(resultRelevance, query);
 
@@ -217,64 +210,104 @@ public class IndexingSiteService {
         }
     }
 
-    private List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, String query) {
-        return pageRelevance.stream()
-                .map(page -> {
-                    String url = page.getPage().getSite().getUrl();
-                    String nameUrl = page.getPage().getSite().getName();
-                    String uri = page.getPage().getPath();
+    private Pair<List<Lemma>, List<Index>> findLemmaToText(Site site, List<Page> pages) {
+        Map<String, Lemma> allLemmas = new ConcurrentHashMap<>();
+        List<Index> indexList = new ArrayList<>();
 
-                    Document document = Jsoup.parse(page.getPage().getContent());
-                    String title = document.title();
+        pages.parallelStream().forEach(page -> {
+            try {
+                LemmaFinder lemmaFinder = LemmaFinder.getInstance();
+                Map<String, Integer> currentLemmas = lemmaFinder.collectLemmas(page.getContent());
+                currentLemmas.forEach((lemmaText, count) -> {
+                    Lemma lemma = allLemmas.computeIfAbsent(lemmaText, text -> {
+                        Lemma l = new Lemma();
+                        l.setSite(site);
+                        l.setLemma(text);
+                        l.setFrequency(0);
+                        return l;
+                    });
 
-                    String snippet = generatedSnippet(query, page.getPage().getContent());
+                    lemma.setFrequency(lemma.getFrequency() + count);
 
-                    return new ResultSearchRequest(url, nameUrl, uri, title, snippet, page.getRelativeRelevance());
-                }).toList();
+                    Index index = new Index();
+                    index.setPage(page);
+                    index.setLemma(lemma);
+                    index.setRank((float) count);
+                    indexList.add(index);
+                });
+            } catch (IOException e) {
+                log.error("Ошибка при лемматизации страницы: {}", page.getPath(), e);
+            }
+        });
+        return Pair.of(new ArrayList<>(allLemmas.values()), indexList);
     }
 
+    private boolean checkIndexingPage(String url, SiteConfig siteConfig) {
+        String path = url.substring(siteConfig.getUrl().length());
+        return pageRepository.existsByPath(path);
+    }
 
-    private String generatedSnippet(String query, String content) {
+    private List<Page> addSiteToPage(Site site, List<Page> pages) {
+        pages.forEach(p -> p.setSite(site));
+        return pages;
+    }
 
-        String text = Jsoup.parse(content).text();
-
-        String[] words = query.split("\\s+");
-
-        int index = findFirstOccurrenceIndex(text, words);
-
-        if (index == -1) {
-            return text.length() > 100 ? text.substring(0, 100) + " " : text;
+    private Optional<SiteConfig> checkPageToSiteConfig(String url) {
+        for (SiteConfig siteConfig : sitesList.getSites()) {
+            if (url.startsWith(siteConfig.getUrl())) {
+                return Optional.of(siteConfig);
+            }
         }
-
-        int snippetLength = query.length() + 100;
-        int start = Math.max(0, index - 50);
-        int end = Math.min(text.length(), start + snippetLength);
-
-        return highlightWords(text.substring(start, end), words);
+        return Optional.empty();
     }
 
-    private int findFirstOccurrenceIndex(String text, String[] words) {
-
-        String regex = String.join("|", words);
-        Pattern pattern = Pattern.compile(regex);
-        Matcher matcher = pattern.matcher(text);
-
-        return matcher.find() ? matcher.start() : -1;
+    private Site initSite(SiteConfig siteConfig) {
+        Site site = new Site();
+        site.setUrl(siteConfig.getUrl());
+        site.setName(siteConfig.getName());
+        site.setStatusTime(LocalDateTime.now());
+        site.setLastError("");
+        site.setStatus(INDEXING);
+        return site;
     }
 
-    private String highlightWords(String text, String[] words) {
+    private void batchIndexInsert(List<Index> indexList) {
+        String sql = "INSERT INTO index (page_id,lemma_id,rank) VALUES (?,?,?)";
+        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement ps, int i) throws SQLException {
+                Index index = indexList.get(i);
+                Hibernate.initialize(index.getPage());
+                Hibernate.initialize(index.getLemma());
+                ps.setObject(1, index.getPage().getId());
+                ps.setObject(2, index.getLemma().getId());
+                ps.setFloat(3, index.getRank());
+            }
 
-        String regex = "(" + String.join("|", words) + ")";
-        Pattern pattern = Pattern.compile(regex);
-        Matcher matcher = pattern.matcher(text);
+            @Override
+            public int getBatchSize() {
+                return indexList.size();
+            }
+        });
+    }
 
-        StringBuilder result = new StringBuilder();
-        while (matcher.find()) {
-            matcher.appendReplacement(result, "<b>" + matcher.group() + "</b>");
-        }
-        matcher.appendTail(result);
+    private void allInsert(Site site,List<Page> pageList,
+                           List<Lemma> lemmaList,List<Index> indexList){
+        pool.execute(()-> {
+            site.setStatus(INDEXED);
+            log.info("Сохранение сайта: {}",site.getName());
+            siteRepository.save(site);
 
-        return result.toString();
+            log.info("Сохранение страниц");
+            pageRepository.saveAll(pageList);
+
+            log.info("Сохранение лемм");
+            lemmaRepository.saveAll(lemmaList);
+
+            log.info("Сохранение индексов страниц и лемм");
+            batchIndexInsert(indexList);
+        });
+        log.info("Сохранение проиндексированного сайта {} завершено",site.getName());
     }
 
     private List<PageRelevance> calculatedRelevance(List<Lemma> filterLemma) {
@@ -334,86 +367,20 @@ public class IndexingSiteService {
         return new ArrayList<>(filterLemma);
     }
 
+    private List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, String query) {
+        return pageRelevance.stream()
+                .map(page -> {
+                    String url = page.page().getSite().getUrl();
+                    String nameUrl = page.page().getSite().getName();
+                    String uri = page.page().getPath();
 
-    private Optional<SiteConfig> checkPageToSiteConfig(String url) {
-        for (SiteConfig siteConfig : sitesList.getSites()) {
-            if (url.startsWith(siteConfig.getUrl())) {
-                return Optional.of(siteConfig);
-            }
-        }
-        return Optional.empty();
-    }
+                    Document document = Jsoup.parse(page.page().getContent());
+                    String title = document.title();
 
-    private Pair<List<Lemma>, List<Index>> findLemmaToText(Site site, List<Page> pages) {
-        Map<String, Lemma> allLemmas = new ConcurrentHashMap<>();
-        List<Index> indexList = new ArrayList<>();
+                    String snippet = SnippetGenerator.generatedSnippet(query, page.page().getContent());
 
-        pages.parallelStream().forEach(page -> {
-            try {
-                LemmaFinder lemmaFinder = LemmaFinder.getInstance();
-                Map<String, Integer> currentLemmas = lemmaFinder.collectLemmas(page.getContent());
-                currentLemmas.forEach((lemmaText, count) -> {
-                    Lemma lemma = allLemmas.computeIfAbsent(lemmaText, text -> {
-                        Lemma l = new Lemma();
-                        l.setSite(site);
-                        l.setLemma(text);
-                        l.setFrequency(0);
-                        return l;
-                    });
-
-                    lemma.setFrequency(lemma.getFrequency() + count);
-
-                    Index index = new Index();
-                    index.setPage(page);
-                    index.setLemma(lemma);
-                    index.setRank((float) count);
-                    indexList.add(index);
-                });
-            } catch (IOException e) {
-                log.error("Ошибка при лемматизации страницы: {}", page.getPath(), e);
-            }
-        });
-        return Pair.of(new ArrayList<>(allLemmas.values()), indexList);
-    }
-
-    private boolean checkIndexingPage(String url, SiteConfig siteConfig) {
-        String path = url.substring(siteConfig.getUrl().length());
-        return pageRepository.existsByPath(path);
-    }
-
-    private List<Page> addSiteToPage(Site site, List<Page> pages) {
-        pages.forEach(p -> p.setSite(site));
-        return pages;
-    }
-
-    private Site initSite(SiteConfig siteConfig) {
-        Site site = new Site();
-        site.setUrl(siteConfig.getUrl());
-        site.setName(siteConfig.getName());
-        site.setStatusTime(LocalDateTime.now());
-        site.setLastError("");
-        site.setStatus(INDEXING);
-        return site;
-    }
-
-    private void batchIndexInsert(List<Index> indexList) {
-        String sql = "INSERT INTO index (page_id,lemma_id,rank) VALUES (?,?,?)";
-        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
-            @Override
-            public void setValues(PreparedStatement ps, int i) throws SQLException {
-                Index index = indexList.get(i);
-                Hibernate.initialize(index.getPage());
-                Hibernate.initialize(index.getLemma());
-                ps.setObject(1, index.getPage().getId());
-                ps.setObject(2, index.getLemma().getId());
-                ps.setFloat(3, index.getRank());
-            }
-
-            @Override
-            public int getBatchSize() {
-                return indexList.size();
-            }
-        });
+                    return new ResultSearchRequest(url, nameUrl, uri, title, snippet, page.relativeRelevance());
+                }).toList();
     }
 
 }

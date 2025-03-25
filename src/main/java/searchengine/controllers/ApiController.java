@@ -22,7 +22,7 @@ public class ApiController {
 
     @GetMapping("/search")
     public ResponseBoolean search(@RequestParam String query,
-                                 @RequestParam(required = false) String site,
+                                  @RequestParam(required = false) String site,
                                   @RequestParam(required = false, defaultValue = "0") Integer offset,
                                   @RequestParam(required = false,defaultValue = "20")Integer limit){
 

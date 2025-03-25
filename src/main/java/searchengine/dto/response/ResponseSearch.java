@@ -10,9 +10,9 @@ import java.util.List;
 @AllArgsConstructor
 public class ResponseSearch extends ResponseBoolean{
 
-    private boolean result;
+    private Boolean result;
 
-    private int count;
+    private Integer count;
 
     private List<ResultSearchRequest> data;
 }
