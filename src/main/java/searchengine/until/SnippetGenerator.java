@@ -7,6 +7,8 @@ import java.util.regex.Pattern;
 
 public final class SnippetGenerator {
 
+    private static final int CONTEXT_RADIUS = 200;
+
     public static String generatedSnippet(String query, String content) {
 
         String text = Jsoup.parse(content).text();
@@ -16,14 +18,33 @@ public final class SnippetGenerator {
         int index = findFirstOccurrenceIndex(text, words);
 
         if (index == -1) {
-            return text.length() > 100 ? text.substring(0, 100) + " " : text;
+            return text.length() > 100 ? text.substring(0, 300) : text;
         }
 
-        int snippetLength = query.length() + 100;
-        int start = Math.max(0, index - 50);
-        int end = Math.min(text.length(), start + snippetLength);
+        int start = index - 50 <= 0 ? 0 : startSnippet(text,index);
+        int end = index + CONTEXT_RADIUS > text.length() ? text.length() : endSnippet(text,index);
 
         return highlightWords(text.substring(start, end), words);
+    }
+
+    private static int startSnippet(String text,int index){
+        for(int i = index;i > 0;i--){
+            if(Character.isUpperCase(text.charAt(i)) || text.charAt(i - 1) == '.'
+                    || text.charAt(i - 1) == '!' || text.charAt(i - 1) == '?'){
+                return i;
+            }
+        }
+        return index;
+    }
+
+    private static int endSnippet(String text,int index){
+        for(int i = index + CONTEXT_RADIUS;i < text.length();i++){
+            if(Character.isWhitespace(text.charAt(i)) || text.charAt(i - 1) == '.'
+                    || text.charAt(i - 1) == '!' || text.charAt(i - 1) == '?'){
+                return i - 1;
+            }
+        }
+        return text.length();
     }
 
     private static int findFirstOccurrenceIndex(String text, String[] words) {
@@ -46,7 +67,10 @@ public final class SnippetGenerator {
             matcher.appendReplacement(result, "<b>" + matcher.group() + "</b>");
         }
         matcher.appendTail(result);
-
+        char lastChar = result.charAt(result.length() - 1);
+        if (lastChar != '.' && lastChar != '!' && lastChar != '?') {
+            result.append("...");
+        }
         return result.toString();
     }
 }

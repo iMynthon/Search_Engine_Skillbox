@@ -37,8 +37,6 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static searchengine.model.Status.*;
 
@@ -87,6 +85,7 @@ public class IndexingSiteService {
                 Site site = initSite(siteConfig);
 
                 siteRepository.save(site);
+
                 try {
                     List<Page> pages = new SiteCrawler(siteConfig.getUrl(), connectionSetting).compute();
                     site.setPage(addSiteToPage(site, pages));
@@ -116,7 +115,6 @@ public class IndexingSiteService {
             return CompletableFuture.completedFuture(new ResponseBoolean(true));
         }
         throw new IndexingSitesException("Индексация не запущена");
-
     }
 
     @Transactional
@@ -157,15 +155,15 @@ public class IndexingSiteService {
                 site.setPage(addSiteToPage(site, pages));
 
                 Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
-
                 site.setLemma(lemmaAndIndex.getLeft());
-
                 allInsert(site,pages,lemmaAndIndex.getLeft(),lemmaAndIndex.getRight());
+
 
             } catch (Exception e) {
                 log.error(e.getMessage());
                 site.setLastError(e.getMessage());
                 siteRepository.save(site);
+
             }
         });
 
@@ -211,6 +209,7 @@ public class IndexingSiteService {
     }
 
     private Pair<List<Lemma>, List<Index>> findLemmaToText(Site site, List<Page> pages) {
+        log.info("Начат поиск лемм");
         Map<String, Lemma> allLemmas = new ConcurrentHashMap<>();
         List<Index> indexList = new ArrayList<>();
 
@@ -306,8 +305,8 @@ public class IndexingSiteService {
 
             log.info("Сохранение индексов страниц и лемм");
             batchIndexInsert(indexList);
+            log.info("Сохранение проиндексированного сайта {} завершено",site.getName());
         });
-        log.info("Сохранение проиндексированного сайта {} завершено",site.getName());
     }
 
     private List<PageRelevance> calculatedRelevance(List<Lemma> filterLemma) {
