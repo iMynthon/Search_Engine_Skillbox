@@ -2,8 +2,10 @@ package searchengine.until;
 
 import org.jsoup.Jsoup;
 
+import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public final class SnippetGenerator {
 
@@ -15,7 +17,9 @@ public final class SnippetGenerator {
 
         String[] words = query.split("\\s+");
 
-        int index = findFirstOccurrenceIndex(text, words);
+        int phraseIndex = findPhraseFind(text,query);
+
+        int index = phraseIndex != -1 ? phraseIndex : findFirstOccurrenceIndex(text, words);
 
         if (index == -1) {
             return text.length() > 100 ? text.substring(0, 300) : text;
@@ -47,19 +51,26 @@ public final class SnippetGenerator {
         return text.length();
     }
 
-    private static int findFirstOccurrenceIndex(String text, String[] words) {
-
-        String regex = String.join("|", words);
-        Pattern pattern = Pattern.compile(regex);
+    private static int findPhraseFind(String text,String phrase){
+        Pattern pattern = Pattern.compile(phrase);
         Matcher matcher = pattern.matcher(text);
 
         return matcher.find() ? matcher.start() : -1;
     }
 
+    private static int findFirstOccurrenceIndex(String text, String[] words) {
+
+        return Arrays.stream(words).map(w -> {
+            Pattern pattern = Pattern.compile(w,Pattern.CASE_INSENSITIVE);
+            return pattern.matcher(text);
+        }).findFirst().get().
+
+    }
+
     private static String highlightWords(String text, String[] words) {
 
         String regex = "(" + String.join("|", words) + ")";
-        Pattern pattern = Pattern.compile(regex);
+        Pattern pattern = Pattern.compile(regex,Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(text);
 
         StringBuilder result = new StringBuilder();

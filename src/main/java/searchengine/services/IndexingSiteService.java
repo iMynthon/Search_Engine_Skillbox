@@ -344,7 +344,7 @@ public class IndexingSiteService {
 
     private List<Lemma> calculatingLemmasOnPages(Set<String> lemmas, Site site) {
         long totalPages = pageRepository.count();
-        double threshold = 0.8;
+        double threshold = 1.0;
 
         Set<Lemma> filterLemma = new TreeSet<>(Comparator.comparing(Lemma::getFrequency));
 
