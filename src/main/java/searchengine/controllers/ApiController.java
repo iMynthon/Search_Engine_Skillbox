@@ -43,7 +43,7 @@ public class ApiController {
 
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/stopIndexing")
-    public CompletableFuture<ResponseBoolean> stopIndexing(){
+    public ResponseBoolean stopIndexing(){
        return indexingSiteService.stopIndexing();
     }
 

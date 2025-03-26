@@ -19,7 +19,7 @@ public interface IndexRepository extends JpaRepository<Index,Integer> {
     int countPageToLemma(@Param("id") int id);
 
     @Query("SELECT p FROM Index i INNER JOIN i.page p WHERE i.lemma.id = :id")
-    Optional<List<Page>> findPagesByLemma(@Param("id") Integer id);
+    List<Page> findPagesByLemma(@Param("id") Integer id);
 
     @Query("SELECT i FROM Index i WHERE i.lemma.id IN :lemmaIds")
     List<Index> findByLemmaIdIn(@Param("lemmaIds") List<Integer> lemmaIds);

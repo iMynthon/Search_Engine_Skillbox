@@ -114,6 +114,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             pages.add(currentPage);
             if (Thread.interrupted()) {
                 Thread.currentThread().interrupt();
+                return pages;
             }
         }
         return pages;

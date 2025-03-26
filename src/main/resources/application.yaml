@@ -30,10 +30,10 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://ruweb.net/
-      name: RuWeb.ru
-    - url: https://www.svetlovka.ru/
-      name: Svetlovka.ru
+#    - url: https://ruweb.net/
+#      name: RuWeb.ru
+#    - url: https://www.svetlovka.ru/
+#      name: Svetlovka.ru
     - url: http://www.playback.ru/
       name: PlayBack.ru
 

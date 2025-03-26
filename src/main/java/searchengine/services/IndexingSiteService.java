@@ -88,12 +88,8 @@ public class IndexingSiteService {
 
                 try {
                     List<Page> pages = new SiteCrawler(siteConfig.getUrl(), connectionSetting).compute();
-                    site.setPage(addSiteToPage(site, pages));
 
-                    Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
-                    site.setLemma(lemmaAndIndex.getLeft());
-
-                    allInsert(site,pages,lemmaAndIndex.getLeft(),lemmaAndIndex.getRight());
+                    completableLemmaAndIndex(site,pages);
 
                 } catch (Exception e) {
                     log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
@@ -109,10 +105,34 @@ public class IndexingSiteService {
 
     }
 
-    public CompletableFuture<ResponseBoolean> stopIndexing() {
+    public void completableLemmaAndIndex(Site site,List<Page> pages){
+        pool.execute(()-> {
+            site.setPage(addSiteToPage(site, pages));
+            Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
+
+            site.setLemma(lemmaAndIndex.getLeft());
+
+            site.setStatus(INDEXED);
+
+            log.info("Сохранение сайта: {}",site.getName());
+            siteRepository.save(site);
+
+            log.info("Сохранение страниц");
+            pageRepository.saveAll(pages);
+
+            log.info("Сохранение лемм");
+            lemmaRepository.saveAll(lemmaAndIndex.getLeft());
+
+            log.info("Сохранение индексов страниц и лемм");
+            batchIndexInsert(lemmaAndIndex.getRight());
+            log.info("Сохранение проиндексированного сайта {} завершено",site.getName());
+        });
+    }
+
+    public ResponseBoolean stopIndexing() {
         if (!pool.isShutdown()) {
             pool.shutdownNow();
-            return CompletableFuture.completedFuture(new ResponseBoolean(true));
+            return new ResponseBoolean(true);
         }
         throw new IndexingSitesException("Индексация не запущена");
     }
@@ -152,12 +172,7 @@ public class IndexingSiteService {
             try {
                 List<Page> pages = new SiteCrawler(siteConfig.getUrl(), urlToPage, connectionSetting).compute();
 
-                site.setPage(addSiteToPage(site, pages));
-
-                Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
-                site.setLemma(lemmaAndIndex.getLeft());
-                allInsert(site,pages,lemmaAndIndex.getLeft(),lemmaAndIndex.getRight());
-
+                completableLemmaAndIndex(site,pages);
 
             } catch (Exception e) {
                 log.error(e.getMessage());
@@ -179,15 +194,16 @@ public class IndexingSiteService {
             LemmaFinder lemmaFinder = LemmaFinder.getInstance();
             Set<String> uniqueLemma = lemmaFinder.getLemmaSet(query);
             List<Lemma> filterLemma = calculatingLemmasOnPages(uniqueLemma, site);
-
-            List<Page> pages = indexRepository.findPagesByLemma(filterLemma.get(0).getId()).orElseThrow(
-                    () -> new ResourcesNotFoundException("Страниц с вашим поисковым запросом не найдено"));
+            if(filterLemma.isEmpty()){
+                return new ResponseSearch(true,0,List.of());
+            }
+            List<Page> pages = indexRepository.findPagesByLemma(filterLemma.get(0).getId());
 
             for (Lemma lemma : filterLemma) {
-                Optional<List<Page>> pageWithLemma = indexRepository.findPagesByLemma(lemma.getId());
+                List<Page> pageWithLemma = indexRepository.findPagesByLemma(lemma.getId());
 
                 pages = pages.stream()
-                        .filter(pageWithLemma.get()::contains)
+                        .filter(pageWithLemma::contains)
                         .toList();
             }
 
@@ -290,25 +306,6 @@ public class IndexingSiteService {
         });
     }
 
-    private void allInsert(Site site,List<Page> pageList,
-                           List<Lemma> lemmaList,List<Index> indexList){
-        pool.execute(()-> {
-            site.setStatus(INDEXED);
-            log.info("Сохранение сайта: {}",site.getName());
-            siteRepository.save(site);
-
-            log.info("Сохранение страниц");
-            pageRepository.saveAll(pageList);
-
-            log.info("Сохранение лемм");
-            lemmaRepository.saveAll(lemmaList);
-
-            log.info("Сохранение индексов страниц и лемм");
-            batchIndexInsert(indexList);
-            log.info("Сохранение проиндексированного сайта {} завершено",site.getName());
-        });
-    }
-
     private List<PageRelevance> calculatedRelevance(List<Lemma> filterLemma) {
 
         List<PageRelevance> resultRelevance = new ArrayList<>();
@@ -357,7 +354,7 @@ public class IndexingSiteService {
             for (Lemma currentLemma : lemmaList) {
                 if (currentLemma != null) {
                     long countPageToLemma = indexRepository.countPageToLemma(currentLemma.getId());
-                    if ((double) countPageToLemma / totalPages <= threshold || lemmaList.size() < 4) {
+                    if ((double) countPageToLemma / totalPages <= threshold || lemmas.size() == 1) {
                         filterLemma.add(currentLemma);
                     }
                 }
@@ -367,18 +364,20 @@ public class IndexingSiteService {
     }
 
     private List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, String query) {
+
         return pageRelevance.stream()
                 .map(page -> {
-                    String url = page.page().getSite().getUrl();
-                    String nameUrl = page.page().getSite().getName();
-                    String uri = page.page().getPath();
 
-                    Document document = Jsoup.parse(page.page().getContent());
-                    String title = document.title();
+                        String url = page.page().getSite().getUrl();
+                        String nameUrl = page.page().getSite().getName();
+                        String uri = page.page().getPath();
 
-                    String snippet = SnippetGenerator.generatedSnippet(query, page.page().getContent());
+                        Document document = Jsoup.parse(page.page().getContent());
+                        String title = document.title();
 
-                    return new ResultSearchRequest(url, nameUrl, uri, title, snippet, page.relativeRelevance());
+                        String snippet = SnippetGenerator.generatedSnippet(query, page.page().getContent());
+
+                        return new ResultSearchRequest(url, nameUrl, uri, title, snippet, page.relativeRelevance());
                 }).toList();
     }
 
