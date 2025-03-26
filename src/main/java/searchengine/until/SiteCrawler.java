@@ -83,23 +83,20 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             pages.add(currentPage);
 
             for (Element element : elements) {
-
-                if (Thread.interrupted()) {
+                if(Thread.currentThread().isInterrupted()){
                     Thread.currentThread().interrupt();
                     return pages;
                 }
-
                 String abshref = element.attr("abs:href");
                 if (isValidLink(abshref.trim())) {
                     SiteCrawler siteCrawler = new SiteCrawler(abshref, visitedUrls, setting);
                     siteCrawler.fork();
-
                     crawler.add(siteCrawler);
                 }
             }
 
             for (SiteCrawler siteCrawler : crawler) {
-                if (Thread.interrupted()) {
+                if(Thread.currentThread().isInterrupted()){
                     Thread.currentThread().interrupt();
                     return pages;
                 }
@@ -110,21 +107,18 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         } catch (IOException e) {
             log.info("Недействительный URL: {}", another_url);
             currentPage.setCode(500);
-            currentPage.setContent(e.getMessage().isEmpty() ? "Индексация остановлена пользователей" : e.getMessage());
+            currentPage.setContent(e.getMessage().isEmpty() ? "Индексация остановлена пользователем" : e.getMessage());
             pages.add(currentPage);
-            if (Thread.interrupted()) {
+            if(Thread.currentThread().isInterrupted()){
                 Thread.currentThread().interrupt();
                 return pages;
             }
+
         }
         return pages;
     }
 
     public boolean isValidLink(String urls) {
-        if (Thread.interrupted()) {
-            Thread.currentThread().interrupt();
-            return false;
-        }
         return urls.startsWith(HEAD_URL) && !urls.contains("#") && !visitedUrls.contains(urls)
                 && !FILE_PATTERN.matcher(urls).matches();
 

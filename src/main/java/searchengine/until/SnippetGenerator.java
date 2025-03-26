@@ -5,7 +5,6 @@ import org.jsoup.Jsoup;
 import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 public final class SnippetGenerator {
 
@@ -60,11 +59,13 @@ public final class SnippetGenerator {
 
     private static int findFirstOccurrenceIndex(String text, String[] words) {
 
-        return Arrays.stream(words).map(w -> {
-            Pattern pattern = Pattern.compile(w,Pattern.CASE_INSENSITIVE);
-            return pattern.matcher(text);
-        }).findFirst().get().
-
+       return Arrays.stream(words).map(word-> {
+           Pattern pattern = Pattern.compile(word,Pattern.CASE_INSENSITIVE);
+           Matcher matcher = pattern.matcher(text);
+           return matcher.find() ? matcher.start() : - 1;
+       }).filter(index -> index != -1)
+               .findFirst()
+               .orElse(-1);
     }
 
     private static String highlightWords(String text, String[] words) {
