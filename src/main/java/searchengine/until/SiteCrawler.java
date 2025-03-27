@@ -61,6 +61,10 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
         if (visitedUrls.contains(another_url)) {
             return pages;
         }
+        if(Thread.currentThread().isInterrupted() || getPool().isShutdown()){
+            Thread.currentThread().interrupt();
+            return pages;
+        }
         visitedUrls.add(another_url);
 
         log.info("Индексация URL: {}", another_url);
@@ -83,7 +87,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             pages.add(currentPage);
 
             for (Element element : elements) {
-                if(Thread.currentThread().isInterrupted()){
+                if(Thread.currentThread().isInterrupted() || getPool().isShutdown()){
                     Thread.currentThread().interrupt();
                     return pages;
                 }
@@ -96,7 +100,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             }
 
             for (SiteCrawler siteCrawler : crawler) {
-                if(Thread.currentThread().isInterrupted()){
+                if(Thread.currentThread().isInterrupted() || getPool().isShutdown()){
                     Thread.currentThread().interrupt();
                     return pages;
                 }
@@ -109,7 +113,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             currentPage.setCode(500);
             currentPage.setContent(e.getMessage().isEmpty() ? "Индексация остановлена пользователем" : e.getMessage());
             pages.add(currentPage);
-            if(Thread.currentThread().isInterrupted()){
+            if(Thread.currentThread().isInterrupted() || getPool().isShutdown()){
                 Thread.currentThread().interrupt();
                 return pages;
             }

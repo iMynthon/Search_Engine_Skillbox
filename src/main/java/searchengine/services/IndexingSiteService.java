@@ -89,7 +89,8 @@ public class IndexingSiteService {
                     Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
 
                     site.setLemma(lemmaAndIndex.getLeft());
-                    site.setStatus(INDEXED);
+                    site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
+                    site.setLastError(pool.isShutdown() ? "Индексация остановлена пользователем" : "");
 
                     allInsert(site,pages,lemmaAndIndex);
 
@@ -97,7 +98,7 @@ public class IndexingSiteService {
                     log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
                     site.setStatus(FAILED);
                     site.setStatusTime(LocalDateTime.now());
-                    site.setLastError(pool.isShutdown() ? "Индексация остановлена пользователем" : e.getMessage());
+                    site.setLastError(e.getMessage());
                     siteRepository.save(site);
                 }
                 log.info("Сайт проиндексирован: {}", siteConfig);
@@ -109,7 +110,7 @@ public class IndexingSiteService {
 
     public ResponseBoolean stopIndexing() {
         if (!pool.isShutdown()) {
-            pool.shutdownNow();
+            pool.shutdown();
             return new ResponseBoolean(true);
         }
         throw new IndexingSitesException("Индексация не запущена");
