@@ -60,12 +60,11 @@ public class IndexingSiteService {
         isIndexingRunning.set(true);
         log.info("Индексация запущена");
 
-
         pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors()
                 , ForkJoinPool.defaultForkJoinWorkerThreadFactory,
                 null, true);
 
-        pool.submit(() -> {
+        pool.execute(() -> {
             for (SiteConfig siteConfig : sitesList.getSites()) {
 
                 if (siteRepository.existsByUrl(siteConfig.getUrl())) {
@@ -79,7 +78,6 @@ public class IndexingSiteService {
                 log.info("Индексация сайта: {}", siteConfig.getUrl());
 
                 Site site = initSite(siteConfig);
-
                 siteRepository.save(site);
 
                 try {
@@ -111,6 +109,7 @@ public class IndexingSiteService {
     public ResponseBoolean stopIndexing() {
         if (!pool.isShutdown()) {
             pool.shutdown();
+            log.info("Индексация была остановлена пользователем");
             return new ResponseBoolean(true);
         }
         throw new IndexingSitesException("Индексация не запущена");
@@ -119,8 +118,8 @@ public class IndexingSiteService {
     @Transactional
     public ResponseBoolean deleteSiteIndexing(Integer id) {
         if (!siteRepository.existsById(id)) {
-            return new ResponseError(new ResourcesNotFoundException("По вашему запросу ничего не найдено, " +
-                    "данный сайт не был проиндексирован"));
+            return new ResponseError(new ResourcesNotFoundException(String.format("По вашему запросу ничего не найдено, " +
+                    "по такому %d сайт не найден",id)));
         }
         siteRepository.deleteById(id);
         return new ResponseBoolean(true);
@@ -133,9 +132,9 @@ public class IndexingSiteService {
                 "Данная страница %s находится за переделами конфигурационных файлов", urlToPage)));
 
         if (checkIndexingPage(urlToPage, siteConfig)) {
-            log.info("Такая страница уже есть в базе данных");
+            log.info("Такая страница {} уже есть в базе данных",urlToPage);
             pageRepository.deletePageByPath(urlToPage.substring(siteConfig.getUrl().length()));
-            log.info("Все связанные данные с этой страницы были удалены");
+            log.info("Все данные которые были связаны со страницей: {} были удалены",urlToPage);
         }
 
         Site site = siteRepository.findByUrl(siteConfig.getUrl());
@@ -166,7 +165,6 @@ public class IndexingSiteService {
 
             }
         });
-
         return CompletableFuture.completedFuture(new ResponseBoolean(true));
     }
 
@@ -210,7 +208,7 @@ public class IndexingSiteService {
     }
 
     private Pair<List<Lemma>, List<Index>> findLemmaToText(Site site, List<Page> pages) {
-        log.info("Начат поиск лемм");
+        log.info("Начат поиск лемм сайта: {}",site.getName());
         Map<String, Lemma> allLemmas = new ConcurrentHashMap<>();
         List<Index> indexList = new ArrayList<>();
 
@@ -273,18 +271,23 @@ public class IndexingSiteService {
 
     private void allInsert(Site site, List<Page> pages,Pair<List<Lemma>, List<Index>> lemmaAndIndex){
         pool.execute(()-> {
-            log.info("Сохранение сайта: {}",site.getName());
+            String string = pool.isShutdown() ? String.format("Сохранение сайта %s с остановленной индексацией",site.getName())
+                    : String.format("Сохранение проиндексированного сайта %s", site.getName());
+            log.info(string);
+            log.info("Сохранение сайта: {}" ,site.getName());
             siteRepository.save(site);
 
-            log.info("Сохранение страниц");
+            log.info("Сохранение страниц: {}" , site.getName());
             pageRepository.saveAll(pages);
 
-            log.info("Сохранение лемм");
+            log.info("Сохранение лемм: {}" , site.getName());
             lemmaRepository.saveAll(lemmaAndIndex.getLeft());
 
-            log.info("Сохранение индексов страниц и лемм");
+            log.info("Сохранение индексов страниц и лемм: {}", site.getName());
             batchIndexInsert(lemmaAndIndex.getRight());
-            log.info("Сохранение проиндексированного сайта {} завершено",site.getName());
+            string = pool.isShutdown() ? String.format("Сохранение сайта %s с остановленной индексацией завершено",site.getName())
+                    : String.format("Сохранение проиндексированного сайта %s завершено", site.getName());
+            log.info(string);
         });
     }
 
