@@ -55,7 +55,7 @@ public class ApiController {
 
     @ResponseStatus(HttpStatus.OK)
     @PostMapping("/indexPage")
-    public CompletableFuture<ResponseBoolean> IndexPage(@RequestBody @NotBlank String url){
+    public ResponseBoolean IndexPage(@RequestBody @NotBlank String url){
         return indexingSiteService.indexPage(url);
     }
 }

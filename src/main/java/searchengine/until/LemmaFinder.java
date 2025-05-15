@@ -6,6 +6,7 @@ import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class LemmaFinder {
@@ -23,49 +24,25 @@ public class LemmaFinder {
     }
 
     public Map<String, Integer> collectLemmas(String text) {
-        String[] words = arrayContainsRussianWords(text);
-        HashMap<String, Integer> lemmas = new HashMap<>();
-
-        for (String word : words) {
-            if (word.isBlank()) {
-                continue;
-            }
-
-            List<String> wordBaseForms = luceneMorphology.getMorphInfo(word);
-            if (anyWordBaseBelongToParticle(wordBaseForms)) {
-                continue;
-            }
-
-            List<String> normalForms = luceneMorphology.getNormalForms(word);
-            if (normalForms.isEmpty()) {
-                continue;
-            }
-
-            String normalWord = normalForms.get(0);
-
-            if (lemmas.containsKey(normalWord)) {
-                lemmas.put(normalWord, lemmas.get(normalWord) + 1);
-            } else {
-                lemmas.put(normalWord, 1);
-            }
-        }
-
-        return lemmas;
+        return Arrays.stream(arrayContainsRussianWords(text)).parallel()
+                .filter(word -> !word.isBlank())
+                .filter(word -> !anyWordBaseBelongToParticle(luceneMorphology.getMorphInfo(word)))
+                .map(luceneMorphology::getNormalForms)
+                .filter(normalForms -> !normalForms.isEmpty())
+                .map(normalForms -> normalForms.get(0))
+                .collect(Collectors.toMap(
+                        normalForm -> normalForm,
+                        normalForm -> 1,
+                        Integer::sum));
     }
 
     public Set<String> getLemmaSet(String text) {
-        String[] textArray = arrayContainsRussianWords(text);
-        Set<String> lemmaSet = new HashSet<>();
-        for (String word : textArray) {
-            if (!word.isEmpty() && isCorrectWordForm(word)) {
-                List<String> wordBaseForms = luceneMorphology.getMorphInfo(word);
-                if (anyWordBaseBelongToParticle(wordBaseForms)) {
-                    continue;
-                }
-                lemmaSet.addAll(luceneMorphology.getNormalForms(word));
-            }
-        }
-        return lemmaSet;
+        return Arrays.stream(arrayContainsRussianWords(text))
+                .filter(word -> !word.isEmpty() && isCorrectWordForm(word))
+                .map(luceneMorphology::getMorphInfo)
+                .filter(wordBaseRoms -> !anyWordBaseBelongToParticle(wordBaseRoms))
+                .flatMap(wordBaseForm -> luceneMorphology.getNormalForms(wordBaseForm.get(0)).stream())
+                .collect(Collectors.toSet());
     }
 
     private boolean anyWordBaseBelongToParticle(List<String> wordBaseForms) {
@@ -73,12 +50,8 @@ public class LemmaFinder {
     }
 
     private boolean hasParticleProperty(String wordBase) {
-        for (String property : particlesNames) {
-            if (wordBase.toUpperCase().contains(property)) {
-                return true;
-            }
-        }
-        return false;
+        return Arrays.stream(particlesNames)
+                .anyMatch(particlesNames -> wordBase.toUpperCase().contains(particlesNames));
     }
 
     private String[] arrayContainsRussianWords(String text) {
@@ -88,12 +61,8 @@ public class LemmaFinder {
     }
 
     private boolean isCorrectWordForm(String word) {
-        List<String> wordInfo = luceneMorphology.getMorphInfo(word);
-        for (String morphInfo : wordInfo) {
-            if (morphInfo.matches(WORD_TYPE_REGEX)) {
-                return false;
-            }
-        }
-        return true;
+        return luceneMorphology.getMorphInfo(word)
+                .stream().noneMatch(morphInfo -> morphInfo.matches(WORD_TYPE_REGEX));
+
     }
 }

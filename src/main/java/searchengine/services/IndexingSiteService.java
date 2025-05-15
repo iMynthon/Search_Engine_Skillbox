@@ -56,56 +56,37 @@ public class IndexingSiteService {
             log.info("Индексация уже запущена");
             return CompletableFuture.completedFuture(new ResponseError(new Exception("Индексация уже запущена")));
         }
-
         isIndexingRunning.set(true);
         log.info("Индексация запущена");
-
-        pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors()
-                , ForkJoinPool.defaultForkJoinWorkerThreadFactory,
-                null, true);
-
-        pool.execute(() -> {
-            for (SiteConfig siteConfig : sitesList.getSites()) {
-
-                if (siteRepository.existsByUrl(siteConfig.getUrl())) {
-                    log.info("Этот сайт уже проиндексирован: {}", siteConfig);
-                    continue;
-                } else if (pool.isShutdown()) {
-                    log.info("Индексация остановлена");
-                    break;
-                }
-
+        pool = new ForkJoinPool();
+        jdbcTemplate.update("DELETE FROM site_schema.index");
+        jdbcTemplate.update("DELETE FROM site_schema.lemma");
+        jdbcTemplate.update("DELETE FROM site_schema.page");
+        jdbcTemplate.update("DELETE FROM site_schema.site");
+        for (SiteConfig siteConfig : sitesList.getSites()) {
+            pool.execute(()-> {
                 log.info("Индексация сайта: {}", siteConfig.getUrl());
-
                 Site site = initSite(siteConfig);
                 siteRepository.save(site);
-
-                try {
-                    List<Page> pages = new SiteCrawler(siteConfig.getUrl(), connectionSetting).compute();
-                    site.setPage(addSiteToPage(site, pages));
-
-                    Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
-
-                    site.setLemma(lemmaAndIndex.getLeft());
-                    site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
-                    site.setLastError(pool.isShutdown() ? "Индексация остановлена пользователем" : "");
-
-                    allInsert(site,pages,lemmaAndIndex);
-
-                } catch (Exception e) {
-                    log.error("Ошибка при индексация сайта: {}", siteConfig + " - " + e.getMessage());
-                    site.setStatus(FAILED);
-                    site.setStatusTime(LocalDateTime.now());
-                    site.setLastError(e.getMessage());
-                    siteRepository.save(site);
-                }
+                List<Page> pages = new SiteCrawler(siteConfig.getUrl(),site.getUrl(), connectionSetting).compute();
+                site.setPage(addSiteToPage(site, pages));
+                Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
+                site.setLemma(lemmaAndIndex.getLeft());
+                site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
+                site.setLastError(pool.isShutdown() ? "Индексация остановлена пользователем" : "");
+                allInsert(site, pages, lemmaAndIndex);
+                site.setStatus(FAILED);
+                site.setStatusTime(LocalDateTime.now());
+                siteRepository.save(site);
                 log.info("Сайт проиндексирован: {}", siteConfig);
-            }
-        });
+            });
+
+        }
         isIndexingRunning.set(false);
         return CompletableFuture.completedFuture(new ResponseBoolean(true));
     }
 
+    
     public ResponseBoolean stopIndexing() {
         if (!pool.isShutdown()) {
             pool.shutdown();
@@ -115,7 +96,8 @@ public class IndexingSiteService {
         throw new IndexingSitesException("Индексация не запущена");
     }
 
-    @Transactional
+
+
     public ResponseBoolean deleteSiteIndexing(Integer id) {
         if (!siteRepository.existsById(id)) {
             return new ResponseError(new ResourcesNotFoundException(String.format("По вашему запросу ничего не найдено, " +
@@ -125,7 +107,7 @@ public class IndexingSiteService {
         return new ResponseBoolean(true);
     }
 
-    public CompletableFuture<ResponseBoolean> indexPage(String url) {
+    public ResponseBoolean indexPage(String url) {
         String urlToPage = URLDecoder.decode(url.substring(url.indexOf("h")), StandardCharsets.UTF_8);
 
         SiteConfig siteConfig = checkPageToSiteConfig(urlToPage).orElseThrow(() -> new ResourcesNotFoundException(String.format(
@@ -139,33 +121,7 @@ public class IndexingSiteService {
 
         Site site = siteRepository.findByUrl(siteConfig.getUrl());
 
-        pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors()
-                , ForkJoinPool.defaultForkJoinWorkerThreadFactory,
-                null, true);
-
-        log.info("Индексация страницы: {}", urlToPage);
-
-        pool.execute(() -> {
-            try {
-                List<Page> pages = new SiteCrawler(siteConfig.getUrl(), urlToPage, connectionSetting).compute();
-
-                site.setPage(addSiteToPage(site, pages));
-
-                Pair<List<Lemma>, List<Index>> lemmaAndIndex = findLemmaToText(site, pages);
-
-                site.setLemma(lemmaAndIndex.getLeft());
-                site.setStatus(INDEXED);
-
-                allInsert(site,pages,lemmaAndIndex);
-
-            } catch (Exception e) {
-                log.error(e.getMessage());
-                site.setLastError(e.getMessage());
-                siteRepository.save(site);
-
-            }
-        });
-        return CompletableFuture.completedFuture(new ResponseBoolean(true));
+      return new ResponseBoolean(true);
     }
 
     public ResponseBoolean systemSearch(String query, String siteUrl, Integer offset, Integer limit) {
@@ -216,21 +172,21 @@ public class IndexingSiteService {
             try {
                 LemmaFinder lemmaFinder = LemmaFinder.getInstance();
                 Map<String, Integer> currentLemmas = lemmaFinder.collectLemmas(page.getContent());
-                currentLemmas.forEach((lemmaText, count) -> {
-                    Lemma lemma = allLemmas.computeIfAbsent(lemmaText, text -> {
+                currentLemmas.forEach((key, value) -> {
+                    Lemma lemma = allLemmas.computeIfAbsent(key, text -> {
                         Lemma l = new Lemma();
                         l.setSite(site);
                         l.setLemma(text);
-                        l.setFrequency(0);
+                        l.setFrequency(1);
                         return l;
                     });
 
-                    lemma.setFrequency(lemma.getFrequency() + count);
+                    lemma.setFrequency(lemma.getFrequency() + 1);
 
                     Index index = new Index();
                     index.setPage(page);
                     index.setLemma(lemma);
-                    index.setRank((float) count);
+                    index.setRank((float) lemma.getFrequency());
                     indexList.add(index);
                 });
             } catch (IOException e) {

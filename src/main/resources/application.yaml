@@ -1,11 +1,14 @@
 server:
   port: 8080
-
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5436/searchengine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
-    username: Warg
-    password: engine
+    url: jdbc:postgresql://localhost:5436/search-engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+    username: postgres
+    password: postgres
+    hikari:
+      schema: site_schema
+      connection-init-sql: CREATE SCHEMA IF NOT EXISTS site_schema
+      connection-timeout: 10000
 
   jpa:
     show-sql: false
@@ -14,8 +17,8 @@ spring:
 
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
-    enabled: true
-    drop-first: true
+    enabled: false
+    drop-first: false
 
   output:
     ansi:
@@ -27,8 +30,8 @@ indexing-settings:
       name: RuWeb.ru
     - url: https://www.svetlovka.ru/
       name: Svetlovka.ru
-    - url: http://www.playback.ru/
-      name: PlayBack.ru
+    - url: https://habr.com/ru
+      name: spring
 
 connection-settings:
   settings:

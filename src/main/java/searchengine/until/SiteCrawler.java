@@ -20,40 +20,26 @@ import java.util.regex.Pattern;
 @Slf4j
 public class SiteCrawler extends RecursiveTask<List<Page>> {
 
-    private static String HEAD_URL;
+    private final String HEAD_URL;
 
     private final String another_url;
 
-    private final Set<String> visitedUrls;
+    private final static Set<String> visitedUrls = ConcurrentHashMap.newKeySet();
 
     private final ConnectionSetting setting;
 
     private static final Pattern FILE_PATTERN = Pattern
-            .compile(".*\\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz|7z|mp3|wav|mp4|mkv|avi|mov|sql)$", Pattern.CASE_INSENSITIVE);
+            .compile(".*\\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz|7z|mp3|wav|mp4|mkv|avi|mov|sql|webp)$", Pattern.CASE_INSENSITIVE);
 
 
-    public SiteCrawler(String url, ConnectionSetting setting) {
-        this(url, ConcurrentHashMap.newKeySet(), setting);
-        HEAD_URL = url;
-
-    }
-
-    public SiteCrawler(String url, Set<String> visitedUrls, ConnectionSetting connectionSetting) {
-        this.another_url = url;
-        this.visitedUrls = visitedUrls;
-        this.setting = connectionSetting;
-    }
-
-    public SiteCrawler(String HeadUrl, String another_url, ConnectionSetting setting) {
-        HEAD_URL = HeadUrl;
+    public SiteCrawler(String site,String another_url, ConnectionSetting setting) {
+        this.HEAD_URL = site;
         this.another_url = another_url;
         this.setting = setting;
-        this.visitedUrls = ConcurrentHashMap.newKeySet();
     }
 
     @Override
     public List<Page> compute() {
-
         Page currentPage = new Page(another_url.substring(HEAD_URL.length()));
 
         List<Page> pages = new CopyOnWriteArrayList<>();
@@ -93,7 +79,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
                 }
                 String abshref = element.attr("abs:href");
                 if (isValidLink(abshref.trim())) {
-                    SiteCrawler siteCrawler = new SiteCrawler(abshref, visitedUrls, setting);
+                    SiteCrawler siteCrawler = new SiteCrawler(HEAD_URL,abshref,setting);
                     siteCrawler.fork();
                     crawler.add(siteCrawler);
                 }
