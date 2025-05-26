@@ -51,7 +51,7 @@ public final class SnippetGenerator {
     }
 
     private static int findPhraseFind(String text,String phrase){
-        Pattern pattern = Pattern.compile(phrase);
+        Pattern pattern = Pattern.compile(phrase,Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(text);
 
         return matcher.find() ? matcher.start() : -1;

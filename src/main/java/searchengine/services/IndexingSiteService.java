@@ -12,6 +12,7 @@ import org.springframework.cache.annotation.CacheConfig;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
@@ -169,7 +170,6 @@ public class IndexingSiteService {
                 return new ResponseSearch(true,0,List.of());
             }
             List<Page> pages = indexRepository.findPagesByLemma(filterLemma.get(0).getId());
-
             for (Lemma lemma : filterLemma) {
                 List<Page> pageWithLemma = indexRepository.findPagesByLemma(lemma.getId());
 
@@ -177,12 +177,9 @@ public class IndexingSiteService {
                         .filter(pageWithLemma::contains)
                         .toList();
             }
-
             List<PageRelevance> resultRelevance = calculatedRelevance(filterLemma);
             resultRelevance.sort(Comparator.comparing(PageRelevance::absoluteRelevance).reversed());
-
             List<ResultSearchRequest> resultSearchRequestList = createdRequest(resultRelevance, query);
-
             int totalResultSearchCount = resultSearchRequestList.size();
             List<ResultSearchRequest> paginationResult = resultSearchRequestList.stream()
                     .skip(offset)
@@ -236,9 +233,7 @@ public class IndexingSiteService {
                         l.setFrequency(1);
                         return l;
                     });
-
                     lemma.setFrequency(lemma.getFrequency() + 1);
-
                     Index index = new Index();
                     index.setPage(page);
                     index.setLemma(lemma);
@@ -300,19 +295,17 @@ public class IndexingSiteService {
             log.info(string);
     }
 
+    @EntityGraph(attributePaths = "lemma")
     private void batchIndexInsert(List<Index> indexList) {
         String sql = "INSERT INTO index (page_id,lemma_id,rank) VALUES (?,?,?)";
         jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
             @Override
             public void setValues(PreparedStatement ps, int i) throws SQLException {
                 Index index = indexList.get(i);
-                Hibernate.initialize(index.getPage());
-                Hibernate.initialize(index.getLemma());
                 ps.setObject(1, index.getPage().getId());
                 ps.setObject(2, index.getLemma().getId());
                 ps.setFloat(3, index.getRank());
             }
-
             @Override
             public int getBatchSize() {
                 return indexList.size();
@@ -321,47 +314,35 @@ public class IndexingSiteService {
     }
 
     private List<PageRelevance> calculatedRelevance(List<Lemma> filterLemma) {
-
         List<PageRelevance> resultRelevance = new ArrayList<>();
-
         List<Integer> lemmaIds = filterLemma.stream()
                 .mapToInt(Lemma::getId)
                 .boxed()
                 .toList();
-
         List<Index> indexList = indexRepository.findByLemmaIdIn(lemmaIds);
-
         Map<Page, Double> pageToRelevance = new HashMap<>();
-
         for (Index index : indexList) {
             Page page = index.getPage();
             double rank = index.getRank();
-
             pageToRelevance.put(page, pageToRelevance.getOrDefault(page, 0.0) + rank);
         }
-
         double maxAbsoluteRelevance = pageToRelevance.values().stream()
                 .mapToDouble(Double::doubleValue)
                 .max()
                 .orElse(0.1);
-
         for (Map.Entry<Page, Double> entry : pageToRelevance.entrySet()) {
             Page page = entry.getKey();
             double absoluteRelevance = entry.getValue();
             double relativeRelevance = absoluteRelevance / maxAbsoluteRelevance;
-
             resultRelevance.add(new PageRelevance(page, absoluteRelevance, relativeRelevance));
         }
-
         return resultRelevance;
     }
 
     private List<Lemma> calculatingLemmasOnPages(Set<String> lemmas, Site site) {
         long totalPages = pageRepository.count();
         double threshold = 0.8;
-
         Set<Lemma> filterLemma = new TreeSet<>(Comparator.comparing(Lemma::getFrequency));
-
         for (String lemma1 : lemmas) {
             List<Lemma> lemmaList = site == null ? lemmaRepository.findByLemma(lemma1)
                     : Collections.singletonList(lemmaRepository.findByLemmaToSiteId(lemma1, site));
@@ -378,19 +359,14 @@ public class IndexingSiteService {
     }
 
     private List<ResultSearchRequest> createdRequest(List<PageRelevance> pageRelevance, String query) {
-
         return pageRelevance.stream()
                 .map(page -> {
-
                         String url = page.page().getSite().getUrl();
                         String nameUrl = page.page().getSite().getName();
                         String uri = page.page().getPath();
-
                         Document document = Jsoup.parse(page.page().getContent());
                         String title = document.title();
-
                         String snippet = SnippetGenerator.generatedSnippet(query, page.page().getContent());
-
                         return new ResultSearchRequest(url, nameUrl, uri, title, snippet, page.relativeRelevance());
                 }).toList();
     }
