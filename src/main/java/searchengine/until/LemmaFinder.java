@@ -37,12 +37,18 @@ public class LemmaFinder {
     }
 
     public Set<String> getLemmaSet(String text) {
-        return Arrays.stream(arrayContainsRussianWords(text))
-                .filter(word -> !word.isEmpty() && isCorrectWordForm(word))
-                .map(luceneMorphology::getMorphInfo)
-                .filter(wordBaseRoms -> !anyWordBaseBelongToParticle(wordBaseRoms))
-                .flatMap(wordBaseForm -> luceneMorphology.getNormalForms(wordBaseForm.get(0)).stream())
-                .collect(Collectors.toSet());
+        String[] textArray = arrayContainsRussianWords(text);
+        Set<String> lemmaSet = new HashSet<>();
+        for (String word : textArray) {
+            if (!word.isEmpty() && isCorrectWordForm(word)) {
+                List<String> wordBaseForms = luceneMorphology.getMorphInfo(word);
+                if (anyWordBaseBelongToParticle(wordBaseForms)) {
+                    continue;
+                }
+                lemmaSet.addAll(luceneMorphology.getNormalForms(word));
+            }
+        }
+        return lemmaSet;
     }
 
     private boolean anyWordBaseBelongToParticle(List<String> wordBaseForms) {

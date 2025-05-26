@@ -2,8 +2,8 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import searchengine.config.SiteConfig;
-import searchengine.config.SitesList;
+import searchengine.config.app.SiteConfig;
+import searchengine.config.app.SitesList;
 import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResponse;

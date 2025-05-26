@@ -6,7 +6,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import searchengine.config.ConnectionSetting;
+import searchengine.config.app.ConnectionSetting;
 import searchengine.model.Page;
 
 import java.io.IOException;
@@ -21,16 +21,12 @@ import java.util.regex.Pattern;
 public class SiteCrawler extends RecursiveTask<List<Page>> {
 
     private final String HEAD_URL;
-
     private final String another_url;
-
     private final static Set<String> visitedUrls = ConcurrentHashMap.newKeySet();
-
     private final ConnectionSetting setting;
-
     private static final Pattern FILE_PATTERN = Pattern
-            .compile(".*\\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz|7z|mp3|wav|mp4|mkv|avi|mov|sql|webp)$", Pattern.CASE_INSENSITIVE);
-
+            .compile(".*\\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz|7z|mp3|wav|mp4|mkv|avi|mov|sql|webp)$",
+                    Pattern.CASE_INSENSITIVE);
 
     public SiteCrawler(String site,String another_url, ConnectionSetting setting) {
         this.HEAD_URL = site;
@@ -41,9 +37,7 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
     @Override
     public List<Page> compute() {
         Page currentPage = new Page(another_url.substring(HEAD_URL.length()));
-
         List<Page> pages = new CopyOnWriteArrayList<>();
-
         if (visitedUrls.contains(another_url)) {
             return pages;
         }
@@ -52,11 +46,8 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
             return pages;
         }
         visitedUrls.add(another_url);
-
         log.info("Индексация URL: {}", another_url);
-
         List<SiteCrawler> crawler = new CopyOnWriteArrayList<>();
-
         try {
             Connection.Response response = Jsoup.connect(another_url)
                     .userAgent(setting.getCurrentUserAgent())
@@ -66,12 +57,9 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
 
             currentPage.setCode(response.statusCode());
             currentPage.setContent(response.body());
-
             Document document = response.parse();
             Elements elements = document.select("a");
-
             pages.add(currentPage);
-
             for (Element element : elements) {
                 if(Thread.currentThread().isInterrupted() || getPool().isShutdown()){
                     Thread.currentThread().interrupt();
@@ -84,7 +72,6 @@ public class SiteCrawler extends RecursiveTask<List<Page>> {
                     crawler.add(siteCrawler);
                 }
             }
-
             for (SiteCrawler siteCrawler : crawler) {
                 if(Thread.currentThread().isInterrupted() || getPool().isShutdown()){
                     Thread.currentThread().interrupt();

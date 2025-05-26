@@ -4,15 +4,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.hibernate.Hibernate;
+import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import searchengine.config.ConnectionSetting;
-import searchengine.config.SiteConfig;
-import searchengine.config.SitesList;
+import searchengine.config.app.ConnectionSetting;
+import searchengine.config.app.SiteConfig;
+import searchengine.config.app.SitesList;
 import searchengine.dto.response.*;
 import searchengine.exception.IndexingSitesException;
 import searchengine.exception.ResourcesNotFoundException;
@@ -39,6 +46,7 @@ import static searchengine.model.Status.*;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@CacheConfig(cacheManager = "redisCacheManager")
 public class IndexingSiteService {
 
     private final SiteRepository siteRepository;
@@ -51,6 +59,11 @@ public class IndexingSiteService {
     private final JdbcTemplate jdbcTemplate;
     private final AtomicBoolean isIndexingRunning = new AtomicBoolean(false);
 
+    @Lazy
+    @Autowired
+    private IndexingSiteService selfProxy;
+
+    @CacheEvict(value = "Search_Result", allEntries = true)
     public CompletableFuture<ResponseBoolean> startIndexingSite() {
         if (isIndexingRunning.get()) {
             log.info("Индексация уже запущена");
@@ -59,10 +72,7 @@ public class IndexingSiteService {
         isIndexingRunning.set(true);
         log.info("Индексация запущена");
         pool = new ForkJoinPool();
-        jdbcTemplate.update("DELETE FROM site_schema.index");
-        jdbcTemplate.update("DELETE FROM site_schema.lemma");
-        jdbcTemplate.update("DELETE FROM site_schema.page");
-        jdbcTemplate.update("DELETE FROM site_schema.site");
+        proxiesDelete();
         for (SiteConfig siteConfig : sitesList.getSites()) {
             pool.execute(()-> {
                 log.info("Индексация сайта: {}", siteConfig.getUrl());
@@ -74,9 +84,7 @@ public class IndexingSiteService {
                 site.setLemma(lemmaAndIndex.getLeft());
                 site.setStatus(pool.isShutdown() ? FAILED : INDEXED);
                 site.setLastError(pool.isShutdown() ? "Индексация остановлена пользователем" : "");
-                allInsert(site, pages, lemmaAndIndex);
-                site.setStatus(FAILED);
-                site.setStatusTime(LocalDateTime.now());
+                proxiesSave(site, pages, lemmaAndIndex);
                 siteRepository.save(site);
                 log.info("Сайт проиндексирован: {}", siteConfig);
             });
@@ -86,7 +94,16 @@ public class IndexingSiteService {
         return CompletableFuture.completedFuture(new ResponseBoolean(true));
     }
 
-    
+    @Async
+    protected void deleteAllDataIndexingSites(){
+        log.info("Очищение всех таблиц в БД");
+        jdbcTemplate.update("DELETE FROM site_schema.index");
+        jdbcTemplate.update("DELETE FROM site_schema.lemma");
+        jdbcTemplate.update("DELETE FROM site_schema.page");
+        jdbcTemplate.update("DELETE FROM site_schema.site");
+        log.info("Очищение завершено");
+    }
+
     public ResponseBoolean stopIndexing() {
         if (!pool.isShutdown()) {
             pool.shutdown();
@@ -96,8 +113,7 @@ public class IndexingSiteService {
         throw new IndexingSitesException("Индексация не запущена");
     }
 
-
-
+    @CacheEvict(value = "Search_Result", allEntries = true)
     public ResponseBoolean deleteSiteIndexing(Integer id) {
         if (!siteRepository.existsById(id)) {
             return new ResponseError(new ResourcesNotFoundException(String.format("По вашему запросу ничего не найдено, " +
@@ -107,23 +123,39 @@ public class IndexingSiteService {
         return new ResponseBoolean(true);
     }
 
+    @CacheEvict(value = "Search_Result", allEntries = true)
     public ResponseBoolean indexPage(String url) {
         String urlToPage = URLDecoder.decode(url.substring(url.indexOf("h")), StandardCharsets.UTF_8);
-
         SiteConfig siteConfig = checkPageToSiteConfig(urlToPage).orElseThrow(() -> new ResourcesNotFoundException(String.format(
                 "Данная страница %s находится за переделами конфигурационных файлов", urlToPage)));
-
+        String path = urlToPage.substring(siteConfig.getUrl().length());
         if (checkIndexingPage(urlToPage, siteConfig)) {
             log.info("Такая страница {} уже есть в базе данных",urlToPage);
-            pageRepository.deletePageByPath(urlToPage.substring(siteConfig.getUrl().length()));
+            pageRepository.deletePageByPath(path);
             log.info("Все данные которые были связаны со страницей: {} были удалены",urlToPage);
         }
-
         Site site = siteRepository.findByUrl(siteConfig.getUrl());
+        try {
+            Connection.Response response = Jsoup.connect(urlToPage)
+                    .userAgent(connectionSetting.getCurrentUserAgent())
+                    .referrer(connectionSetting.getCurrentReferrer())
+                    .timeout(5000)
+                    .execute();
+            Page page = Page.builder()
+                    .site(site)
+                    .path(path)
+                    .code(response.statusCode())
+                    .content(response.body())
+                    .build();
+            findLemmaAndIndexToIndexPage(site,page);
+        } catch (IOException io){
+            io.printStackTrace();
+        }
 
       return new ResponseBoolean(true);
     }
 
+    @Cacheable(value = "Search_Result",keyGenerator = "searchKeyGenerator")
     public ResponseBoolean systemSearch(String query, String siteUrl, Integer offset, Integer limit) {
         if (query.isBlank()) {
             return new ResponseEmptySearchQuery(false, "Пустой поисковый запрос");
@@ -163,11 +195,35 @@ public class IndexingSiteService {
         }
     }
 
+    private void findLemmaAndIndexToIndexPage(Site site,Page page) throws IOException {
+        List<Index> indexList = new ArrayList<>();
+        List<Lemma> lemmaList = new ArrayList<>();
+        LemmaFinder lemmaFinder = LemmaFinder.getInstance();
+        Map<String, Integer> currentLemmas = lemmaFinder.collectLemmas(page.getContent());
+        currentLemmas.forEach((key, value) -> {
+            Lemma lemma = lemmaRepository.findByLemmaToSiteId(key,site);
+            if(lemma == null){
+                lemma = Lemma.builder()
+                        .site(site)
+                        .lemma(key)
+                        .frequency(1)
+                        .build();
+            }
+            lemma.setFrequency(lemma.getFrequency() + 1);
+            lemmaList.add(lemma);
+            Index index = new Index();
+            index.setPage(page);
+            index.setLemma(lemma);
+            index.setRank((float) lemma.getFrequency());
+            indexList.add(index);
+        });
+        allInsert(site,Collections.singletonList(page),Pair.of(lemmaList,indexList));
+    }
+
     private Pair<List<Lemma>, List<Index>> findLemmaToText(Site site, List<Page> pages) {
         log.info("Начат поиск лемм сайта: {}",site.getName());
         Map<String, Lemma> allLemmas = new ConcurrentHashMap<>();
         List<Index> indexList = new ArrayList<>();
-
         pages.parallelStream().forEach(page -> {
             try {
                 LemmaFinder lemmaFinder = LemmaFinder.getInstance();
@@ -225,26 +281,23 @@ public class IndexingSiteService {
         return site;
     }
 
-    private void allInsert(Site site, List<Page> pages,Pair<List<Lemma>, List<Index>> lemmaAndIndex){
-        pool.execute(()-> {
+    @Async
+    @Transactional
+    protected void allInsert(Site site, List<Page> pages,Pair<List<Lemma>, List<Index>> lemmaAndIndex){
             String string = pool.isShutdown() ? String.format("Сохранение сайта %s с остановленной индексацией",site.getName())
                     : String.format("Сохранение проиндексированного сайта %s", site.getName());
             log.info(string);
             log.info("Сохранение сайта: {}" ,site.getName());
             siteRepository.save(site);
-
             log.info("Сохранение страниц: {}" , site.getName());
             pageRepository.saveAll(pages);
-
             log.info("Сохранение лемм: {}" , site.getName());
             lemmaRepository.saveAll(lemmaAndIndex.getLeft());
-
             log.info("Сохранение индексов страниц и лемм: {}", site.getName());
             batchIndexInsert(lemmaAndIndex.getRight());
             string = pool.isShutdown() ? String.format("Сохранение сайта %s с остановленной индексацией завершено",site.getName())
                     : String.format("Сохранение проиндексированного сайта %s завершено", site.getName());
             log.info(string);
-        });
     }
 
     private void batchIndexInsert(List<Index> indexList) {
@@ -340,6 +393,14 @@ public class IndexingSiteService {
 
                         return new ResultSearchRequest(url, nameUrl, uri, title, snippet, page.relativeRelevance());
                 }).toList();
+    }
+
+    protected void proxiesSave(Site site, List<Page> pages,Pair<List<Lemma>, List<Index>> lemmaAndIndex){
+        selfProxy.allInsert(site, pages, lemmaAndIndex);
+    }
+
+    protected void proxiesDelete(){
+        selfProxy.deleteAllDataIndexingSites();
     }
 
 }

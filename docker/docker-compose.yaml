@@ -2,10 +2,14 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:17
+    image: postgres:15-alpine
     ports:
       - "5436:5432"
     environment:
       - POSTGRES_USERNAME=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=search-engine
+  redis:
+    image: redis:8.0.1-alpine
+    ports:
+      - "6379:6379"

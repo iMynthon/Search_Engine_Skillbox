@@ -1,4 +1,4 @@
-package searchengine.config;
+package searchengine.config.app;
 
 import lombok.Getter;
 import lombok.Setter;
